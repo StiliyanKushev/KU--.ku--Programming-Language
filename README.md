@@ -1,1 +1,1 @@
-stik (.sk) Programming Language
+KU (.ku) Programming Language
