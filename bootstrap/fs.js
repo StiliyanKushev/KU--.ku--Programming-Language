@@ -7,7 +7,7 @@ module.exports.getSourceText = () => {
     filePath = filePath ? path.resolve(filePath) : null
     if(!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile || !filePath.endsWith('.ku'))
         return cmd.error('Invalid source file path')
-    return fs.readFileSync(filePath)
+    return fs.readFileSync(filePath).toString()
 }
 
 module.exports.compileAsm = asm => {

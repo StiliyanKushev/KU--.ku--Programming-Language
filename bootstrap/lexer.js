@@ -1,3 +1,5 @@
-module.exports = source => {
-    // todo
+module.exports = tokens => {
+    for(let token of tokens){
+        // todo
+    }
 }
