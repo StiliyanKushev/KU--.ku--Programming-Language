@@ -2,6 +2,15 @@
 :b = 2
 :c = a + b
 
+if false {
+    out "here"
+}
+
+# notice "()" are not needed, but can be used to wrap an expression
+elif (true) {
+    out "there"
+}
+
 # that's a function that takes no arguments
 print {
     # we call the out function with a string argument
@@ -20,18 +29,12 @@ sum a, b {
 }
 
 # automatically increment i
-for i in 0, 10 {
+for i in 0 to 10 {
     out i
 }
 
 # automatically decrement i
-for i in 10, 0 {
-    out i
-}
-
-# todo maybe change that
-# manually operate i by any number (i + 2 in this example)
-for i in 0, 10 (+2) {
+for i in 10 to 0 {
     out i
 }
 

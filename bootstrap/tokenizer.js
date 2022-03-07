@@ -10,7 +10,7 @@ module.exports = source => {
                 if(char == "\n") inComment = false
                 if(inComment || token == '') continue
 
-                tokens.push({ token, line: lnI, column: chI })
+                tokens.push({ text: token, line: lnI, column: chI })
                 token = ''
                 continue
             }
