@@ -20,7 +20,7 @@ if a != b {
 }
 
 # notice "()" are not needed, but can be used to wrap an expression
-elif (true && true) {
+else if (true && true) {
     out "there"
 }
 

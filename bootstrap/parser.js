@@ -96,6 +96,9 @@ module.exports = tokens => {
             let _value = parse_simple(true)
             _value = maybe_binary(_value, 0)
 
+            // don't allow stuff like this -> :a = b = 1
+            if(_value.type == 'assign') unexpected()
+
             return {
                 type: 'var',
                 name: _var.value,

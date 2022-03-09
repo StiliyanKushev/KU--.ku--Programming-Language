@@ -1,6 +1,6 @@
 module.exports = reader => {
     var current = null
-    var keywords = ' if else elif for each while true false '
+    var keywords = ' if else for each while true false '
     
     // navigation functions
     const peek = () => current || (current = read_next())
@@ -16,11 +16,11 @@ module.exports = reader => {
     const is_keyword    = wd => keywords.indexOf(' ' + wd + ' ') >= 0
     
     // reads chars until new line
-    const skip_comment = () => read_while(function(ch){ return ch != '\n' && ch != '#' }) && reader.next()
+    const skip_comment = () => read_while(function(ch){ return ch != '\n' && ch != '#' }, true) && reader.next()
 
     // returns string until rule(char) is true
-    const read_while = rule => {
-        if(reader.peek() == '#') reader.next()
+    const read_while = (rule, comment=false) => {
+        if(comment && reader.peek() == '#') reader.next()
         let str = ''
         while (!reader.eof() && rule(reader.peek())) {
             str += reader.next()
