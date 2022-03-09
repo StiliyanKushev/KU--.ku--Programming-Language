@@ -1,85 +1,107 @@
-const cmd = require('./cmd')
-
 module.exports = tokens => {
-    console.log(tokens)
+    // the global scope of the program
+    let prog = []
 
-    let program = []        // holds the parsed tree of the program
-    let idx = 0             // holds current index of tokens
-
-    // returns true if token is a begining of another expression
-    let endExpression = token => ['declare', 'keyword', 'identifier'].includes(token.type)
-
-    //// "string"
-    //// "my string"
-    // true
-    // false
-    // (true and true or false)
-    // true and false
-    //// 1
-    // (1 + 1)
-    // 2 + 3
-    // myFunc
-    // mySumFunc 2, 5
-
-    const parseValueExpression = i => {
-        if(tokens[i].type == 'string') {
-            idx = i
-            return { type: 'literal', value: tokens[i].text.substring(1,tokens[i].text.length - 1) }
-        }
-        if(tokens[i].type == 'number') {
-            let t = i
-            let expr = {left: parseValueExpression, right:null, operand:null}
-            while(endExpression(tokens[++t])) str += tokens[t].text
-            str += tokens[t].text.substring(0, tokens[t].text.length - 1)
-            idx = t
-            return { type: 'literal', value: str }
-        }
-        if(tokens[i].type == 'stringstart') {
-            let t = i
-            let str = tokens[i].text.substring(1)
-            while(tokens[++t].type != 'stringend') str += tokens[t].text
-            str += tokens[t].text.substring(0, tokens[t].text.length - 1)
-            idx = t
-            return { type: 'literal', value: str }
-        }
+    // the z-index of operators basically
+    const PRECEDENCE = {
+        '=': 1, '||': 2, '&&': 3,
+        '<': 7, '>': 7, '<=': 7, '>=': 7, '==': 7, '!=': 7,
+        '+': 10, '-': 10,
+        '*': 20, '/': 20, '%': 20,
     }
 
-    const parseDeclare = i => {
-        if(tokens[i + 1].type == 'assign') {
-            idx = i
-            return { 
-                type:   'variableDeclaration', 
-                var:    tokens[i].text.substring(1), 
-                value:  parseValueExpression(i + 2)
+    // validating functions
+    const is_var    = () => { let tok = tokens.peek(); return tok && tok.type == 'var' }
+    const is_punc   = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) && tok }
+    const is_kw     = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) && tok }
+    const is_op     = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) && tok }
+    
+    // token skipping functions
+    const skip_var  = () => is_var() ? tokens.next() : tokens.croak('Expecting variable name:')
+    const skip_punc = ch => is_punc(ch) ? tokens.next() : tokens.croak('Expecting punctuation: \'' + ch + '\'')
+    const skip_kw   = kw => is_kw(kw) ? tokens.next() : tokens.croak('Expecting keyword: \'' + kw + '\'')
+    const skip_op   = op => is_op(op) ? tokens.next() : tokens.croak('Expecting operator: \'' + op + '\'')
+    
+    // helper functions 
+    const unexpected = () => tokens.croak('Unexpected token: ' + JSON.stringify(tokens.peek()))
+    const maybe_binary = (left, my_prec) => {
+        let tok = is_op()
+        if (tok) {
+            let his_prec = PRECEDENCE[tok.value]
+            if (his_prec > my_prec) {
+                tokens.next()
+                return maybe_binary({
+                    type     : tok.value == '=' ? 'assign' : 'binary',
+                    operator : tok.value,
+                    left     : left,
+                    right    : maybe_binary(parse_simple(), his_prec)
+                }, my_prec)
             }
         }
-        else if(endExpression(tokens[i + 1]) && tokens[i].text.substring(1).trim().length > 0){
-            idx = i
+        return left
+    }
+
+    const parse_simple = (throw_err = false, goNext=true) => {
+        // handle warpped expressions
+        if (is_punc('(')) {
+            tokens.next()
+            let exp = maybe_binary(parse_simple(), 0)
+            skip_punc(')')
+            return exp
+        }
+
+        // handle booleans
+        if (is_kw('true') || is_kw('false')) return { type: 'bool', value: tokens.next().value == 'true' }
+
+        // return simple tokens such as values or variables
+        let tok = goNext ? tokens.next() : tokens.peek()
+        if (tok.type == 'var' || tok.type == 'num' || tok.type == 'str') return tok
+
+        if(throw_err) unexpected()
+    }
+
+    const parse_any = () => {
+        // handle simple expressions first
+        let _expr = parse_simple(false, false)
+        if(_expr) return _expr
+
+        // handle variable and object declarations
+        if(is_punc(':')) return parse_delcare()
+
+        unexpected()
+    }
+    
+    const parse_delcare = () => {
+        skip_punc(':')
+        let _var = skip_var()
+        let next = tokens.peek()
+
+        // handle variable declaration
+        if(next.value == '=') {
+            tokens.next()
+            let _value = parse_simple(true)
+            _value = maybe_binary(_value, 0)
+
             return {
-                type:   'variableDeclaration',
-                var:    tokens[i].text.substring(1),
-                value:  undefined
+                type: 'var',
+                name: _var.value,
+                value: _value
             }
         }
-        else if(tokens[i].text.substring(1).trim().length == 0) cmd.invalidToken(tokens[i])
-        else cmd.invalidToken(tokens[i + 1])
+
+        // handle empty varable declaration
+        else {
+            return {
+                type: 'var',
+                name: _var.value,
+                value: undefined
+            }
+        }
     }
 
-    const parseKeyword = i => {
-        // todo
+    return () => {
+        prog = []
+        while (!tokens.eof()) prog.push(parse_any())
+        return { type: 'prog', prog: prog }
     }
-
-    const parseIdentifier = i => {
-        // todo
-    } 
-
-    while(tokens[idx]){
-        if(tokens[idx].type == 'declare')            program.push(parseDeclare(idx))
-        else if(tokens[idx].type == 'keyword')       program.push(parseKeyword(idx))
-        else if(tokens[idx].type == 'identifier')    program.push(parseIdentifier(idx))
-        else                                         cmd.invalidToken(tokens[idx])
-        idx++
-    }
-
-    console.log(program)
 }

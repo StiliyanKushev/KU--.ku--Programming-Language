@@ -1,12 +1,11 @@
 :a
-:b = 2222
-:c = "text"
-:d = "hello my world"
-
-if false {
-    out "here"
-}
-
-sum a, b {
-    ret (a + b)
-}
+:b = 2
+:c = 1 + b + 3
+:d = true
+:e = true && false
+:f = (3 + 5)
+:ff = ( 3 + 5)
+:g = (true)
+:h = (true || false)
+:i = "string"
+:j = "my string"
