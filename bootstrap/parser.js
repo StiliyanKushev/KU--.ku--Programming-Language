@@ -41,9 +41,10 @@ module.exports = tokens => {
         return left
     }
 
+    // parsing functions
     const parse_simple = (throw_err = false, goNext=true) => {
         // handle warpped expressions
-        if (is_punc('(')) {
+        if(is_punc('(')) {
             tokens.next()
             let exp = maybe_binary(parse_simple(), 0)
             skip_punc(')')
@@ -51,7 +52,7 @@ module.exports = tokens => {
         }
 
         // handle booleans
-        if (is_kw('true') || is_kw('false')) return { type: 'bool', value: tokens.next().value == 'true' }
+        if(is_kw('true') || is_kw('false')) return { type: 'bool', value: tokens.next().value == 'true' }
 
         // return simple tokens such as values or variables
         let tok = goNext ? tokens.next() : tokens.peek()
@@ -75,6 +76,19 @@ module.exports = tokens => {
 
         unexpected()
     }
+
+    const parse_object_body = () => {
+        skip_punc('{')
+        let _list = []
+        while(!tokens.eof() && !is_punc('}')){
+            _list.push(parse_delcare(true))
+        }
+        skip_punc('}')
+        return {
+            type: 'object',
+            value: _list
+        }
+    }
     
     const parse_delcare = (skipPunc = true) => {
         if(skipPunc) skip_punc(':')
@@ -93,13 +107,20 @@ module.exports = tokens => {
         // handle variable declaration
         if(next.value == '=') {
             tokens.next()
+
+            // variable is object
+            if(is_punc('{')){
+                let _value = parse_object_body()
+                _value.name = _var.value
+                return _value
+            }
+
             let _value = parse_simple(true)
             _value = maybe_binary(_value, 0)
 
             // don't allow stuff like this -> :a = b = 1
             if(_value.type == 'assign') unexpected()
-
-            return {
+            else return {
                 type: 'var',
                 name: _var.value,
                 value: _value

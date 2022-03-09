@@ -1,5 +1,5 @@
 # define an object variable
 :obj = {
-    name "Stiliyan"
-    age  18
+    :name = "Stiliyan"
+    :age = 18
 }
