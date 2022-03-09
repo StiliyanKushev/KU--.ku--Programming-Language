@@ -1,54 +1,12 @@
-:a = 1
-:b = 2
-:c = a + b
+:a
+:b = 2222
+:c = "text"
+:d = "hello my world"
 
 if false {
     out "here"
 }
 
-# notice "()" are not needed, but can be used to wrap an expression
-elif (true) {
-    out "there"
-}
-
-# that's a function that takes no arguments
-print {
-    # we call the out function with a string argument
-    out "Hello World"
-}
-
-# function with arguments
 sum a, b {
-    ret a + b
-}
-
-# define an object variable
-:obj = {
-    name "Stiliyan"
-    age  18
-}
-
-# automatically increment i
-for i in 0 to 10 {
-    out i
-}
-
-# automatically decrement i
-for i in 10 to 0 {
-    out i
-}
-
-# loop an array of items
-for item in array {
-    out item
-}
-
-# loop an array of items
-for item in array {
-    out item
-}
-
-# while loop
-while true {
-    out "You can't stop me"
+    ret (a + b)
 }

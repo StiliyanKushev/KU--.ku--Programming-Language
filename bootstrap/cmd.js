@@ -4,6 +4,11 @@ module.exports.help = () => {
 }
 
 module.exports.error = err => {
-    console.error("[error] " + err + "!")
+    console.error(err)
     this.help()
+}
+
+module.exports.exit_error = err => {
+    console.error(err)
+    process.exit(0)
 }
