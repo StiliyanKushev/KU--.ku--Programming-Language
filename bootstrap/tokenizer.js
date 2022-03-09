@@ -16,12 +16,15 @@ module.exports = reader => {
     const is_keyword    = wd => keywords.indexOf(' ' + wd + ' ') >= 0
     
     // reads chars until new line
-    const skip_comment = () => read_while(function(ch){ return ch != '\n' }) && reader.next()
+    const skip_comment = () => read_while(function(ch){ return ch != '\n' && ch != '#' }) && reader.next()
 
     // returns string until rule(char) is true
     const read_while = rule => {
+        if(reader.peek() == '#') reader.next()
         let str = ''
-        while (!reader.eof() && rule(reader.peek())) str += reader.next()
+        while (!reader.eof() && rule(reader.peek())) {
+            str += reader.next()
+        }
         return str
     }
 

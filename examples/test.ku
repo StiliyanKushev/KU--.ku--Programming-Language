@@ -1,16 +1,15 @@
-:a
+:a # assign a variable and set it to null
 :b = 2
 :c = 1 + b + 3
 :d = true
 :e = true && false
 :f = (3 + 5)
-:ff = ( 3 + 5)
 :g = (true)
 :h = (true || false)
 :i = "string"
 :j = "my string"
 
-:myVariable # assign a variable and set it to null
+# left comment # :myTempVar # comments can end with a hashtag #
 
 if false {
     out "here"

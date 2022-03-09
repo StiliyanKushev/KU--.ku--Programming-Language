@@ -55,7 +55,7 @@ module.exports = tokens => {
 
         // return simple tokens such as values or variables
         let tok = goNext ? tokens.next() : tokens.peek()
-        if (tok.type == 'var' || tok.type == 'num' || tok.type == 'str') return tok
+        if(tok.type == 'var' || tok.type == 'num' || tok.type == 'str') return tok
 
         if(throw_err) unexpected()
     }
@@ -63,7 +63,12 @@ module.exports = tokens => {
     const parse_any = () => {
         // handle simple expressions first
         let _expr = parse_simple(false, false)
-        if(_expr) return _expr
+        if(_expr) {
+            if(!_expr.type == 'var') return _expr
+            
+            // variable assign
+            return parse_delcare(false)
+        }
 
         // handle variable and object declarations
         if(is_punc(':')) return parse_delcare()
@@ -71,10 +76,19 @@ module.exports = tokens => {
         unexpected()
     }
     
-    const parse_delcare = () => {
-        skip_punc(':')
+    const parse_delcare = (skipPunc = true) => {
+        if(skipPunc) skip_punc(':')
         let _var = skip_var()
         let next = tokens.peek()
+
+        // if on last line
+        if(!next) {
+            return {
+                type: 'var',
+                name: _var.value,
+                value: undefined
+            }
+        }
 
         // handle variable declaration
         if(next.value == '=') {
