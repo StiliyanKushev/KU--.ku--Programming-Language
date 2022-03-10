@@ -12,6 +12,8 @@ module.exports = tokens => {
 
     // validating functions
     const is_var    = () => { let tok = tokens.peek(); return tok && tok.type == 'var' }
+    const is_str    = () => { let tok = tokens.peek(); return tok && tok.type == 'str' }
+    const is_num    = () => { let tok = tokens.peek(); return tok && tok.type == 'num' }
     const is_punc   = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) && tok }
     const is_kw     = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) && tok }
     const is_op     = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) && tok }
@@ -41,6 +43,55 @@ module.exports = tokens => {
         return left
     }
 
+    const maybe_function = prev => {
+        // it's a function with no arguments
+        if(is_punc('{')){
+            skip_punc('{')
+            let _prog = []
+            while(!tokens.eof() && !is_punc('}')){
+                _prog.push(parse_any())
+            }
+            skip_punc('}')
+
+            return {
+                type: 'func',
+                name: prev.name,
+                vars: [],
+                body: _prog
+            }
+        }
+
+        // it's not a function at all
+        return prev
+    }
+
+    const maybe_call = prev => {
+        tokens.next()
+
+        // this is a variable or a literal argument to a call
+        if(is_var() || is_str() || is_num()) {
+            let _args = []
+            
+            const fill_args = () => {
+                _args.push(maybe_binary(tokens.next(), 0))
+                if(is_punc(',')){
+                    skip_punc(',')
+                    fill_args()
+                }
+            }
+
+            fill_args()
+
+            return {
+                type: 'call',
+                name: prev.value,
+                args: _args,
+            }
+        }
+
+        return prev
+    }
+
     // parsing functions
     const parse_simple = (throw_err = false, goNext=true) => {
         // handle warpped expressions
@@ -54,9 +105,12 @@ module.exports = tokens => {
         // handle booleans
         if(is_kw('true') || is_kw('false')) return { type: 'bool', value: tokens.next().value == 'true' }
 
-        // return simple tokens such as values or variables
+        // handle strings and numbers
         let tok = goNext ? tokens.next() : tokens.peek()
-        if(tok.type == 'var' || tok.type == 'num' || tok.type == 'str') return tok
+        if(tok.type == 'num' || tok.type == 'str') return tok
+
+        // it could be a variable name, or a function call
+        if(tok.type == 'var') return maybe_call(tok)
 
         if(throw_err) unexpected()
     }
@@ -65,10 +119,12 @@ module.exports = tokens => {
         // handle simple expressions first
         let _expr = parse_simple(false, false)
         if(_expr) {
-            if(!_expr.type == 'var') return _expr
+            if(_expr.type != 'var') return _expr
             
-            // variable assign
-            return parse_delcare(false)
+            // the var is either a varable trynna be set to a value
+            // or a function initialization (with or without arguments)
+            let _v = maybe_function(parse_delcare(false, _expr))
+            return _v
         }
 
         // handle variable and object declarations
@@ -90,9 +146,9 @@ module.exports = tokens => {
         }
     }
     
-    const parse_delcare = (skipPunc = true) => {
+    const parse_delcare = (skipPunc = true, wasVar=undefined) => {
         if(skipPunc) skip_punc(':')
-        let _var = skip_var()
+        let _var = wasVar || skip_var()
         let next = tokens.peek()
 
         // if on last line
@@ -115,8 +171,7 @@ module.exports = tokens => {
                 return _value
             }
 
-            let _value = parse_simple(true)
-            _value = maybe_binary(_value, 0)
+            let _value = maybe_binary(parse_simple(true), 0)
 
             // don't allow stuff like this -> :a = b = 1
             if(_value.type == 'assign') unexpected()

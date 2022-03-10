@@ -1,5 +1,10 @@
-# define an object variable
-:obj = {
-    :name = "Stiliyan"
-    :age = 18
-}
+# [BUG] you cannot call a function without arguments (as it is read as var, instead of call)
+# [UNSPORTED] making functions that accept arguments
+
+# this should be a call with no arguments
+out
+
+# function with arguments
+# sum a, b {
+#    ret a + b
+# }
