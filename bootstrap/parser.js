@@ -1,7 +1,4 @@
 module.exports = tokens => {
-    // the global scope of the program
-    let prog = []
-
     // the z-index of operators basically
     const PRECEDENCE = {
         '=': 1, '||': 2, '&&': 3,
@@ -10,13 +7,14 @@ module.exports = tokens => {
         '*': 20, '/': 20, '%': 20,
     }
 
-    // validating functions
+    // token validating functions
+    const is_val    = cc => ' num str var '.indexOf(' ' + cc.type + ' ') >= 0
     const is_var    = () => { let tok = tokens.peek(); return tok && tok.type == 'var' }
     const is_str    = () => { let tok = tokens.peek(); return tok && tok.type == 'str' }
     const is_num    = () => { let tok = tokens.peek(); return tok && tok.type == 'num' }
-    const is_punc   = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) && tok }
-    const is_kw     = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) && tok }
-    const is_op     = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) && tok }
+    const is_punc   = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) }
+    const is_kw     = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) }
+    const is_op     = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) }
     
     // token skipping functions
     const skip_var  = () => is_var() ? tokens.next() : tokens.croak('Expecting variable name:')
@@ -26,175 +24,182 @@ module.exports = tokens => {
     
     // helper functions 
     const unexpected = () => tokens.croak('Unexpected token: ' + JSON.stringify(tokens.peek()))
-    const maybe_binary = (left, my_prec) => {
-        let tok = is_op()
-        if (tok) {
-            let his_prec = PRECEDENCE[tok.value]
-            if (his_prec > my_prec) {
-                tokens.next()
-                return maybe_binary({
-                    type     : tok.value == '=' ? 'assign' : 'binary',
-                    operator : tok.value,
-                    left     : left,
-                    right    : maybe_binary(parse_simple(), his_prec)
-                }, my_prec)
-            }
-        }
-        return left
+    
+    const parse_handler = func => {
+        const _old = tokens.save()
+        const reject = () => { tokens.update(_old); return false }
+        const result = func(reject)
+        if(!result) reject()
+        return result
     }
 
-    const maybe_function = prev => {
-        // it's a function with no arguments
-        if(is_punc('{')){
-            skip_punc('{')
-            let _prog = []
-            while(!tokens.eof() && !is_punc('}')){
-                _prog.push(parse_any())
+    const parse_delimited = (is_func, handler, divider) => {
+        let arr = []
+        while(true){
+            if(!is_func(tokens.peek())) return arr
+            arr.push(handler())
+            if(!is_punc(divider)) break
+            skip_punc(divider)
+        }
+        return arr
+    }
+
+    // parsing functions
+    const parse_datatypes = tok => {
+        return parse_handler(reject => {
+            const current = tok || tokens.next()
+            if(is_val(current)) return current
+            if(current.value == 'true' || current.value == 'false') return { type: 'bool', value: current.value == 'true' }
+        })
+    }
+
+    const parse_assign = () => {
+        return parse_handler(reject => {
+            if(!is_var())       return; const name = skip_var()
+            if(!is_op('='))     return
+
+            skip_op('=')
+
+            return {
+                type: 'var',
+                mode: 'assign',
+                name: name.value,
+                value: parse_atom()
             }
+        })
+    }
+
+    const parse_declare = () => {
+        return parse_handler(reject => {
+            if(!is_punc(':'))   return;              skip_punc(':')
+            if(!is_var())       return; const name = skip_var()
+
+            if(!is_op('=')) return {
+                type: 'var',
+                mode: 'declare',
+                name: name.value,
+                value: undefined
+            }
+
+            skip_op('=')
+
+            return {
+                type: 'var',
+                mode: 'declare',
+                name: name.value,
+                value: parse_atom()
+            }
+        })
+    }
+
+    const parse_binary = (left, prev_prec = 0) => {
+        return parse_handler(reject => {
+            if(is_punc('(') && !left){
+                tokens.next()
+                const exp = parse_atom()
+                skip_punc(')')
+                return parse_binary(exp)
+            }
+
+            if(!left){
+                left = parse_call() || parse_datatypes()
+                if(!left)       return 
+                if(!is_op())    return
+            }
+
+            if(!is_op()) return left
+            if(tokens.peek().value == '=') return parse_assign()
+
+            const op = tokens.peek().value
+
+            // do this if the current prec is bigger
+            if(PRECEDENCE[op] > prev_prec) return parse_binary({
+                type     : 'binary',
+                operator : tokens.next().value,
+                left     : left,
+                right    : parse_binary(parse_datatypes(), PRECEDENCE[op])
+            }, prev_prec)
+            return left
+        })
+    }
+
+    const parse_function = () => {
+        return parse_handler(reject => {
+            if(!is_var())       return; const name = skip_var().value
+            if(!is_punc(':'))   return;              skip_punc(':')
+
+            const vars = parse_delimited(is_var, tokens.next, ',')
+
+            skip_punc('{')
+            const body = parse_prog(() => tokens.peek().value != '}')
             skip_punc('}')
 
             return {
                 type: 'func',
-                name: prev.name,
-                vars: [],
-                body: _prog
+                vars: vars,
+                name: name,
+                body: body,
             }
-        }
-
-        // it's not a function at all
-        return prev
+        })
     }
 
-    const maybe_call = prev => {
-        tokens.next()
-
-        // this is a variable or a literal argument to a call
-        if(is_var() || is_str() || is_num()) {
-            let _args = []
-            
-            const fill_args = () => {
-                _args.push(maybe_binary(tokens.next(), 0))
-                if(is_punc(',')){
-                    skip_punc(',')
-                    fill_args()
-                }
-            }
-
-            fill_args()
+    const parse_call = () => {
+        return parse_handler(reject => {
+            if(!is_punc('@')) return; skip_punc('@')
+            const name = skip_var().value
+            const args = parse_delimited(() => {
+                if(tokens.eof()) return false
+                const _pre_args = tokens.save()
+                const valid = parse_atom() != undefined
+                tokens.update(_pre_args)
+                return valid
+            }, parse_atom, ',')
 
             return {
                 type: 'call',
-                name: prev.value,
-                args: _args,
+                name: name,
+                args: args,
             }
-        }
-
-        return prev
+        }) 
     }
 
-    // parsing functions
-    const parse_simple = (throw_err = false, goNext=true) => {
-        // handle warpped expressions
-        if(is_punc('(')) {
-            tokens.next()
-            let exp = maybe_binary(parse_simple(), 0)
-            skip_punc(')')
-            return exp
-        }
-
-        // handle booleans
-        if(is_kw('true') || is_kw('false')) return { type: 'bool', value: tokens.next().value == 'true' }
-
-        // handle strings and numbers
-        let tok = goNext ? tokens.next() : tokens.peek()
-        if(tok.type == 'num' || tok.type == 'str') return tok
-
-        // it could be a variable name, or a function call
-        if(tok.type == 'var') return maybe_call(tok)
-
-        if(throw_err) unexpected()
+    const parse_atom = () => {
+        try {
+            return (
+                parse_binary() ||
+                parse_call() ||
+                parse_datatypes() || 
+                undefined
+            )
+        } catch { unexpected() }
     }
 
     const parse_any = () => {
-        // handle simple expressions first
-        let _expr = parse_simple(false, false)
-        if(_expr) {
-            if(_expr.type != 'var') return _expr
-            
-            // the var is either a varable trynna be set to a value
-            // or a function initialization (with or without arguments)
-            let _v = maybe_function(parse_delcare(false, _expr))
-            return _v
-        }
-
-        // handle variable and object declarations
-        if(is_punc(':')) return parse_delcare()
-
-        unexpected()
+        try {
+            return (
+                parse_binary() ||
+                parse_call() ||
+                //parse_while() ||
+                //parse_for() ||
+                //parse_if() ||
+                //parse_object() ||
+                parse_function() || 
+                parse_assign() ||
+                parse_declare() ||
+                parse_datatypes() ||  
+                unexpected()
+            )
+        } catch { return unexpected() }
     }
 
-    const parse_object_body = () => {
-        skip_punc('{')
-        let _list = []
-        while(!tokens.eof() && !is_punc('}')){
-            _list.push(parse_delcare(true))
+    const parse_prog = rule => {
+        let prog = []
+        while (!tokens.eof() && (rule ? rule() : true)) {
+            let _tokens = parse_any()
+            Array.isArray(_tokens) ? prog.push(..._tokens): prog.push(_tokens)
         }
-        skip_punc('}')
-        return {
-            type: 'object',
-            value: _list
-        }
-    }
-    
-    const parse_delcare = (skipPunc = true, wasVar=undefined) => {
-        if(skipPunc) skip_punc(':')
-        let _var = wasVar || skip_var()
-        let next = tokens.peek()
-
-        // if on last line
-        if(!next) {
-            return {
-                type: 'var',
-                name: _var.value,
-                value: undefined
-            }
-        }
-
-        // handle variable declaration
-        if(next.value == '=') {
-            tokens.next()
-
-            // variable is object
-            if(is_punc('{')){
-                let _value = parse_object_body()
-                _value.name = _var.value
-                return _value
-            }
-
-            let _value = maybe_binary(parse_simple(true), 0)
-
-            // don't allow stuff like this -> :a = b = 1
-            if(_value.type == 'assign') unexpected()
-            else return {
-                type: 'var',
-                name: _var.value,
-                value: _value
-            }
-        }
-
-        // handle empty varable declaration
-        else {
-            return {
-                type: 'var',
-                name: _var.value,
-                value: undefined
-            }
-        }
-    }
-
-    return () => {
-        prog = []
-        while (!tokens.eof()) prog.push(parse_any())
         return { type: 'prog', prog: prog }
     }
+
+    return parse_prog
 }

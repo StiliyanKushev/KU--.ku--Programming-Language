@@ -1,15 +1,15 @@
 module.exports = reader => {
     var current = null
-    var keywords = ' if else for each while true false '
-    
-    // navigation functions
-    const peek = () => current || (current = read_next())
-    const next = () => { let tok = current; current = null; return tok || read_next() }
-    const eof  = () => peek() == null
+    var keywords = ' if else for while true false '
 
+    // navigation functions
+    const next = () => read_next()
+    const peek = () => { let _old = reader.save(); let _ret = next(); reader.update(_old); return _ret }
+    const eof  = () => { let _old = reader.save(); let _ret = peek() == null; reader.update(_old); return _ret }
+ 
     // validation functions
     const is_whitespace = ch => ' \t\n'.indexOf(ch) >= 0
-    const is_punc       = ch => ':,(){}[]'.indexOf(ch) >= 0
+    const is_punc       = ch => ':,(){}[]@'.indexOf(ch) >= 0
     const is_op_char    = ch => '+-*/%=&|<>!'.indexOf(ch) >= 0
     const is_id_start   = ch => /[a-z_A-Z]/i.test(ch)
     const is_digit      = ch => /[0-9]/i.test(ch)
@@ -30,7 +30,8 @@ module.exports = reader => {
 
     // returns keyword or identificator token
     const read_id = () => {
-        let id = read_while(is_id_start)
+        // allow numbers in variable names (but not the first char)
+        let id = read_while(ch => is_id_start(ch) || is_digit(ch))
         return { type: is_keyword(id) ? 'kw' : 'var', value: id }
     }
 
@@ -58,7 +59,7 @@ module.exports = reader => {
     }
 
     // core function of the tokenizer
-    const read_next = () => {
+    const read_next = (str) => {
         read_while(is_whitespace)
         if (reader.eof()) return null
         let ch = reader.peek()
@@ -72,5 +73,5 @@ module.exports = reader => {
     }
 
     // return navigation functions
-    return { next, peek, eof, croak : reader.croak }
+    return { next, peek, eof, croak : reader.croak, save: reader.save, update: reader.update, current: () => current }
 }

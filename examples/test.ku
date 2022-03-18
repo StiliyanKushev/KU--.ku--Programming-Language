@@ -1,5 +1,6 @@
 :a # assign a variable and set it to null
 :b = 2
+b = 1
 :c = 1 + b + 3
 :d = true
 :e = true && false
@@ -11,62 +12,66 @@
 
 # left comment # :myTempVar # comments can end with a hashtag #
 
-if false {
-    out "here"
-}
-
-if a != b {
-    out "oof"
-}
-
-# notice "()" are not needed, but can be used to wrap an expression
-else if (true && true) {
-    out "there"
-}
-
 # that's a function that takes no arguments
-print {
+print: {
     # we call the out function with a string argument
-    out "Hello World"
-}
-
-# function with arguments
-sum a, b {
-    ret a + b
+    @out "Hello World"
 }
 
 # define an object variable
 :obj = {
     :name = "Stiliyan"
     :age = 18
+    greet: { @out "Hello World" }
+}
+
+
+# everything below this comment is yet to be implemented in the parser
+
+if false {
+    @out "here"
+}
+
+if a != b {
+    @out "oof"
+}
+
+# notice "()" are not needed, but can be used to wrap an expression
+else if (true && true) {
+    @out "there"
+}
+
+# function with arguments
+sum: a, b {
+    ret a + b
 }
 
 # automatically increment i
 for i in 0, 10 {
-    out i
+    @out i
 }
 
 # automatically decrement i
 for i in 10, 0 {
-    out i
+    @out i
 }
 
 # manually decrement i
 for i in 10, 0 each - 2 {
-    out i
+    @out i
 }
 
 # loop an array of items
 for item in array {
-    out item
+    @out item
 }
 
 # loop an array of items
 for item in array {
-    out item
+    @out item
 }
 
 # while loop
 while true {
-    out "You can't stop me"
+    @out "You can't stop me"
 }

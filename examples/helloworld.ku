@@ -1,10 +1,8 @@
-# [BUG] you cannot call a function without arguments (as it is read as var, instead of call)
-# [UNSPORTED] making functions that accept arguments
+@out "Hello World"
+@sum 1, 2
+@sum 1 + 3, 6
+@myFunc
 
-# this should be a call with no arguments
-out
-
-# function with arguments
-# sum a, b {
-#    ret a + b
-# }
+:a = @getValue + 2
+:b = @sum 1 + 2, 5 + a
+:c = (@sum 1 + 2, 5) + a
