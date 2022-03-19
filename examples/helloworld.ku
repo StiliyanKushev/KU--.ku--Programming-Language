@@ -1,8 +1,5 @@
-@out "Hello World"
-@sum 1, 2
-@sum 1 + 3, 6
-@myFunc
+if true {}
 
-:a = @getValue + 2
-:b = @sum 1 + 2, 5 + a
-:c = (@sum 1 + 2, 5) + a
+else if false {}
+
+else {}

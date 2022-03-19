@@ -7,14 +7,18 @@ module.exports = tokens => {
         '*': 20, '/': 20, '%': 20,
     }
 
+    // looked at, when parsing "ret" and stuff like that
+    let INSIDE_FUNCTION = false
+
     // token validating functions
-    const is_val    = cc => ' num str var '.indexOf(' ' + cc.type + ' ') >= 0
-    const is_var    = () => { let tok = tokens.peek(); return tok && tok.type == 'var' }
-    const is_str    = () => { let tok = tokens.peek(); return tok && tok.type == 'str' }
-    const is_num    = () => { let tok = tokens.peek(); return tok && tok.type == 'num' }
-    const is_punc   = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) }
-    const is_kw     = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) }
-    const is_op     = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) }
+    const is_bool_op = op => ' && || == > < <= >= != '.indexOf(' ' + op + ' ') >= 0 
+    const is_val     = cc => ' num str var '.indexOf(' ' + cc.type + ' ') >= 0
+    const is_var     = () => { let tok = tokens.peek(); return tok && tok.type == 'var' }
+    const is_str     = () => { let tok = tokens.peek(); return tok && tok.type == 'str' }
+    const is_num     = () => { let tok = tokens.peek(); return tok && tok.type == 'num' }
+    const is_punc    = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) }
+    const is_kw      = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) }
+    const is_op      = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) }
     
     // token skipping functions
     const skip_var  = () => is_var() ? tokens.next() : tokens.croak('Expecting variable name:')
@@ -24,6 +28,13 @@ module.exports = tokens => {
     
     // helper functions 
     const unexpected = () => tokens.croak('Unexpected token: ' + JSON.stringify(tokens.peek()))
+
+    const parse_body = () => {
+        skip_punc('{')
+        const body = parse_prog(() => tokens.peek().value != '}')
+        skip_punc('}')
+        return body
+    }
     
     const parse_handler = func => {
         const _old = tokens.save()
@@ -112,6 +123,8 @@ module.exports = tokens => {
 
             const op = tokens.peek().value
 
+            if(left.type == 'bool' && !is_bool_op(op)) unexpected()
+
             // do this if the current prec is bigger
             if(PRECEDENCE[op] > prev_prec) return parse_binary({
                 type     : 'binary',
@@ -130,9 +143,9 @@ module.exports = tokens => {
 
             const vars = parse_delimited(is_var, tokens.next, ',')
 
-            skip_punc('{')
-            const body = parse_prog(() => tokens.peek().value != '}')
-            skip_punc('}')
+            INSIDE_FUNCTION = true
+            const body = parse_body()
+            INSIDE_FUNCTION = false
 
             return {
                 type: 'func',
@@ -163,10 +176,65 @@ module.exports = tokens => {
         }) 
     }
 
+    const parse_return = () => {
+        if(!INSIDE_FUNCTION) return
+
+        return parse_handler(reject => {
+            if(!is_kw('ret')) return; skip_kw('ret')
+            return {
+                type: 'ret',
+                value: parse_atom()
+            }
+        })
+    }
+
+    const parse_if = () => {
+        return parse_handler(reject => {
+            if(!is_kw('if')) return; skip_kw('if')
+
+            const statement = parse_binary() || parse_datatypes()
+
+            // return if it's not a boolean or a boolean binary
+            if( (statement.type != 'bool' && statement.type != 'binary') || 
+                (statement.type == 'binary' && !is_bool_op(statement.operator))) {
+                reject()
+                skip_kw('if')
+                unexpected()
+            }
+            
+            const body = parse_body()
+            const _else = parse_else()
+
+            return {
+                type        : 'if',
+                statement   : statement,
+                body        : body,
+                else        : _else
+            }
+        })
+    }
+
+    const parse_else = () => {
+        return parse_handler(reject => {
+            if(!is_kw('else')) return;  skip_kw('else')
+            if(is_punc('{')) {
+                const body = parse_body()
+                return {
+                    type: 'else',
+                    body: body
+                }
+            }
+
+            const else_if = parse_if()
+            if(else_if) return else_if
+        })
+    }
+
     const parse_atom = () => {
         try {
             return (
                 parse_binary() ||
+                parse_return() ||
                 parse_call() ||
                 parse_datatypes() || 
                 undefined
@@ -177,7 +245,9 @@ module.exports = tokens => {
     const parse_any = () => {
         try {
             return (
+                parse_if() ||
                 parse_binary() ||
+                parse_return() ||
                 parse_call() ||
                 //parse_while() ||
                 //parse_for() ||

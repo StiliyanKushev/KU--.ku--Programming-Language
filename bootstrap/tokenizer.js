@@ -1,6 +1,6 @@
 module.exports = reader => {
     var current = null
-    var keywords = ' if else for while true false '
+    var keywords = ' if else for while true false ret '
 
     // navigation functions
     const next = () => read_next()
