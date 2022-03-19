@@ -115,7 +115,7 @@ module.exports = tokens => {
             }
 
             if(!left){
-                left = parse_call() || parse_datatypes()
+                left = parse_call() || parse_prefix() || parse_postfix() || parse_datatypes()
                 if(!left)       return 
                 if(!is_op())    return
             }
@@ -132,7 +132,7 @@ module.exports = tokens => {
                 type     : 'binary',
                 operator : tokens.next().value,
                 left     : left,
-                right    : parse_binary(parse_datatypes(), PRECEDENCE[op])
+                right    : parse_binary(parse_prefix() || parse_postfix() || parse_datatypes(), PRECEDENCE[op])
             }, prev_prec)
             return left
         })
@@ -270,10 +270,36 @@ module.exports = tokens => {
         return tokens.next()
     }
 
+    const parse_prefix = () => {
+        return parse_handler(reject => {
+            if(!is_op('++')) return;    skip_op('++')
+            if(!is_var())    unexpected()
+            const name = skip_var().value
+
+            return {
+                type: 'prefix',
+                name: name,
+            }
+        })
+    }
+
+    const parse_postfix = () => {
+        return parse_handler(reject => {
+            if(!is_var())    return;    const name = skip_var().value
+            if(!is_op('++')) return;    skip_op('++')
+            return {
+                type: 'postfix',
+                name: name,
+            }
+        })
+    }
+
     const parse_atom = () => {
         try {
             return (
                 parse_binary() ||
+                parse_prefix() ||
+                parse_postfix() ||
                 parse_return() ||
                 parse_call() ||
                 parse_datatypes() || 
@@ -289,6 +315,8 @@ module.exports = tokens => {
                 parse_continue() ||
                 parse_if() ||
                 parse_binary() ||
+                parse_prefix() ||
+                parse_postfix() ||
                 parse_return() ||
                 parse_call() ||
                 parse_while() ||

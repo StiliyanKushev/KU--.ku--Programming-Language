@@ -46,29 +46,9 @@ sum: a, b {
     ret a + b
 }
 
-# automatically increment i
-for i in 0, 10 {
+# for loop
+for i = 0, i <= 10, i++ {
     @out i
-}
-
-# automatically decrement i
-for i in 10, 0 {
-    @out i
-}
-
-# manually decrement i
-for i in 10, 0 each - 2 {
-    @out i
-}
-
-# loop an array of items
-for item in array {
-    @out item
-}
-
-# loop an array of items
-for item in array {
-    @out item
 }
 
 # while loop
