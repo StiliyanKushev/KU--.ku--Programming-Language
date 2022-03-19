@@ -9,23 +9,24 @@ module.exports = tokens => {
 
     // variables holding the current scope the parser is in
     let INSIDE_FUNCTION = false
-    let INSIDE_WHILE    = false
+    let INSIDE_LOOP    = false
 
     // token validating functions
-    const is_bool_op = op => ' && || == > < <= >= != '.indexOf(' ' + op + ' ') >= 0 
-    const is_val     = cc => ' num str var '.indexOf(' ' + cc.type + ' ') >= 0
-    const is_var     = () => { let tok = tokens.peek(); return tok && tok.type == 'var' }
-    const is_str     = () => { let tok = tokens.peek(); return tok && tok.type == 'str' }
-    const is_num     = () => { let tok = tokens.peek(); return tok && tok.type == 'num' }
-    const is_punc    = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) }
-    const is_kw      = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) }
-    const is_op      = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) }
+    const is_bool_expr = expr => expr.type == 'bool' || (expr.type == 'binary' && is_bool_op(expr.operator))
+    const is_bool_op   = op => ' && || == > < <= >= != '.indexOf(' ' + op + ' ') >= 0 
+    const is_val       = cc => ' num str var '.indexOf(' ' + cc.type + ' ') >= 0
+    const is_var       = () => { let tok = tokens.peek(); return tok && tok.type == 'var' }
+    const is_str       = () => { let tok = tokens.peek(); return tok && tok.type == 'str' }
+    const is_num       = () => { let tok = tokens.peek(); return tok && tok.type == 'num' }
+    const is_punc      = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) }
+    const is_kw        = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) }
+    const is_op        = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) }
     
     // token skipping functions
-    const skip_var  = () => is_var() ? tokens.next() : tokens.croak('Expecting variable name:')
-    const skip_punc = ch => is_punc(ch) ? tokens.next() : tokens.croak('Expecting punctuation: \'' + ch + '\'')
-    const skip_kw   = kw => is_kw(kw) ? tokens.next() : tokens.croak('Expecting keyword: \'' + kw + '\'')
-    const skip_op   = op => is_op(op) ? tokens.next() : tokens.croak('Expecting operator: \'' + op + '\'')
+    const skip_var    = () => is_var() ? tokens.next() : tokens.croak('Expecting variable name:')
+    const skip_punc   = ch => is_punc(ch) ? tokens.next() : tokens.croak('Expecting punctuation: \'' + ch + '\'')
+    const skip_kw     = kw => is_kw(kw) ? tokens.next() : tokens.croak('Expecting keyword: \'' + kw + '\'')
+    const skip_op     = op => is_op(op) ? tokens.next() : tokens.croak('Expecting operator: \'' + op + '\'')
     
     // helper functions 
     const unexpected = () => tokens.croak('Unexpected token: ' + JSON.stringify(tokens.peek()))
@@ -197,8 +198,7 @@ module.exports = tokens => {
             const statement = parse_binary() || parse_datatypes()
 
             // return if it's not a boolean or a boolean binary
-            if( (statement.type != 'bool' && statement.type != 'binary') || 
-                (statement.type == 'binary' && !is_bool_op(statement.operator))) {
+            if(!is_bool_expr(statement)) {
                 reject()
                 skip_kw('if')
                 unexpected()
@@ -239,16 +239,15 @@ module.exports = tokens => {
             const statement = parse_binary() || parse_datatypes()
 
             // return if it's not a boolean or a boolean binary
-            if( (statement.type != 'bool' && statement.type != 'binary') || 
-                (statement.type == 'binary' && !is_bool_op(statement.operator))) {
+            if(!is_bool_expr(statement)) {
                 reject()
                 skip_kw('while')
                 unexpected()
             }
 
-            INSIDE_WHILE = true
+            INSIDE_LOOP = true
             const body = parse_body()
-            INSIDE_WHILE = false
+            INSIDE_LOOP = false
 
             return {
                 type        : 'while',
@@ -258,15 +257,47 @@ module.exports = tokens => {
         })
     }
 
+    const parse_for = () => {
+        return parse_handler(reject => {
+            if(!is_kw('for')) return;       skip_kw('for')
+            const _var = parse_assign();    skip_punc(','); const s_var = tokens.save()
+            if(!_var)                       unexpected()
+
+            const _con = parse_binary();    skip_punc(',')
+            if(!_con)                       unexpected()
+            
+            if(!is_bool_expr(_con)){
+                reject()
+                tokens.update(s_var)
+                unexpected()
+            }
+
+            const post =    parse_assign() ||
+                            parse_call()   ||
+                            parse_prefix() ||
+                            parse_postfix()
+            
+            const body = parse_body()
+
+            return {
+                type      : 'for',
+                var       : _var,
+                condition : _con,
+                post      : post,
+                body      : body
+            }
+        })
+    }
+
     const parse_break = () => {
         if(!is_kw('break')) return
-        if(!INSIDE_WHILE)   unexpected()
+        if(!INSIDE_LOOP)   unexpected()
         return tokens.next()
     }
 
     const parse_continue = () => {
         if(!is_kw('continue')) return
-        if(!INSIDE_WHILE)   unexpected()
+        if(!INSIDE_LOOP)   unexpected()
         return tokens.next()
     }
 
@@ -320,7 +351,7 @@ module.exports = tokens => {
                 parse_return() ||
                 parse_call() ||
                 parse_while() ||
-                //parse_for() ||
+                parse_for() ||
                 parse_function() || 
                 parse_assign() ||
                 parse_declare() ||
