@@ -7,8 +7,9 @@ module.exports = tokens => {
         '*': 20, '/': 20, '%': 20,
     }
 
-    // looked at, when parsing "ret" and stuff like that
+    // variables holding the current scope the parser is in
     let INSIDE_FUNCTION = false
+    let INSIDE_WHILE    = false
 
     // token validating functions
     const is_bool_op = op => ' && || == > < <= >= != '.indexOf(' ' + op + ' ') >= 0 
@@ -56,9 +57,10 @@ module.exports = tokens => {
     }
 
     // parsing functions
-    const parse_datatypes = tok => {
+    const parse_datatypes = (tok, allowVar = true) => {
         return parse_handler(reject => {
             const current = tok || tokens.next()
+            if(current.type == 'var' && !allowVar) return
             if(is_val(current)) return current
             if(current.value == 'true' || current.value == 'false') return { type: 'bool', value: current.value == 'true' }
         })
@@ -230,6 +232,44 @@ module.exports = tokens => {
         })
     }
 
+    const parse_while = () => {
+        return parse_handler(reject => {
+            if(!is_kw('while')) return; skip_kw('while')
+
+            const statement = parse_binary() || parse_datatypes()
+
+            // return if it's not a boolean or a boolean binary
+            if( (statement.type != 'bool' && statement.type != 'binary') || 
+                (statement.type == 'binary' && !is_bool_op(statement.operator))) {
+                reject()
+                skip_kw('while')
+                unexpected()
+            }
+
+            INSIDE_WHILE = true
+            const body = parse_body()
+            INSIDE_WHILE = false
+
+            return {
+                type        : 'while',
+                statement   : statement,
+                body        : body
+            }
+        })
+    }
+
+    const parse_break = () => {
+        if(!is_kw('break')) return
+        if(!INSIDE_WHILE)   unexpected()
+        return tokens.next()
+    }
+
+    const parse_continue = () => {
+        if(!is_kw('continue')) return
+        if(!INSIDE_WHILE)   unexpected()
+        return tokens.next()
+    }
+
     const parse_atom = () => {
         try {
             return (
@@ -245,18 +285,18 @@ module.exports = tokens => {
     const parse_any = () => {
         try {
             return (
+                parse_break() ||
+                parse_continue() ||
                 parse_if() ||
                 parse_binary() ||
                 parse_return() ||
                 parse_call() ||
-                //parse_while() ||
+                parse_while() ||
                 //parse_for() ||
-                //parse_if() ||
-                //parse_object() ||
                 parse_function() || 
                 parse_assign() ||
                 parse_declare() ||
-                parse_datatypes() ||  
+                parse_datatypes(null, false) ||  
                 unexpected()
             )
         } catch { return unexpected() }

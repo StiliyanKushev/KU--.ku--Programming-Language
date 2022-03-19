@@ -1,5 +1,6 @@
-if true {}
-
-else if false {}
-
-else {}
+crash: shouldI {
+    while true {
+        @out "crashed"
+        if shouldI == false { break }
+    }
+}
