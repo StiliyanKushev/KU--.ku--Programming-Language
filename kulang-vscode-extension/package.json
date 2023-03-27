@@ -14,7 +14,11 @@
       "id": "ku",
       "aliases": ["KuLang", "ku"],
       "extensions": [".ku"],
-      "configuration": "./language-configuration.json"
+      "configuration": "./language-configuration.json",
+      "icon": {
+        "light": "./KU.svg",
+        "dark": "./KU.svg"
+      }
     }],
     "grammars": [{
       "language": "ku",
