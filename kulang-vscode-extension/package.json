@@ -1,0 +1,25 @@
+{
+  "name": "kulang",
+  "displayName": "KuLang",
+  "description": "Syntax highlighting for .ku lang.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.76.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "ku",
+      "aliases": ["KuLang", "ku"],
+      "extensions": [".ku"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "ku",
+      "scopeName": "source.ku",
+      "path": "./syntaxes/ku.tmLanguage.json"
+    }]
+  }
+}

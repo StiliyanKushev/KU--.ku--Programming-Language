@@ -1,5 +1,4 @@
 module.exports = reader => {
-    var current = null
     var keywords = ' if else for while true false ret break continue '
 
     // navigation functions
@@ -59,7 +58,7 @@ module.exports = reader => {
     }
 
     // core function of the tokenizer
-    const read_next = (str) => {
+    const read_next = () => {
         read_while(is_whitespace)
         if (reader.eof()) return null
         let ch = reader.peek()
@@ -73,5 +72,5 @@ module.exports = reader => {
     }
 
     // return navigation functions
-    return { next, peek, eof, croak : reader.croak, save: reader.save, update: reader.update, current: () => current }
+    return { next, peek, eof, croak : reader.croak, save: reader.save, update: reader.update }
 }

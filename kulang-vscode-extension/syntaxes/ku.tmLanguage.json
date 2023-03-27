@@ -1,0 +1,92 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "KuLang",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#strings"
+		},
+        {
+			"include": "#comments"
+		},
+        {
+            "include": "#numbers"
+        },
+        {
+            "include": "#operators"
+        },
+        {
+            "include": "#variables"
+        },
+        {
+            "include": "#functions"
+        },
+        {
+            "include": "#boolean"
+        }
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [{
+				"name": "keyword.control.ku",
+				"match": "\\b(if|else|while|for|return|ret)\\b"
+			}]
+		},
+        "numbers": {
+			"patterns": [{
+				"name": "constant.numeric.ku",
+				"match": "\\b(\\d+)\\b"
+			}]
+		},
+        "boolean": {
+			"patterns": [{
+				"name": "constant.language",
+				"match": "(true|false)"
+			}]
+		},
+        "operators": {
+			"patterns": [{
+				"name": "keyword.operator.ku",
+				"match": "\\b(\\+|\\-|\\*|\\/|\\=|\\<|\\>|\\&|\\|)\\b"
+			}]
+		},
+		"strings": {
+			"name": "string.quoted.double.ku",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.ku",
+					"match": "\\\\."
+				}
+			]
+		},
+        "comments": {
+			"patterns": [
+				{
+					"name": "comment.ku",
+					"match": "(\\#[^#|\\n]+#|(?:\\#[^#|^\\n]+\\n?))"
+				}
+			]
+		},
+        "variables": {
+			"patterns": [
+				{
+					"name": "variable.ku",
+					"match": "(?!(false|true|[a-zA-Z_]\\w*:))(?::?[a-zA-Z_]\\w*|[a-zA-Z_]\\w+)"
+				}
+			]
+		},
+        "functions": {
+			"patterns": [
+				{
+					"name": "entity.name.function",
+					"match": "([a-z_A-Z]\\w*:|@[a-z_A-Z]\\w*)"
+				}
+			]
+		}
+	},
+	"scopeName": "source.ku"
+}

@@ -5,7 +5,7 @@ const cmd   = require('./cmd')
 const cp    = require('child_process')
 
 let filePath = process.argv[2]
-let fileName = filePath.split(path.sep).pop().split('.')[0]
+let fileName = filePath ? filePath.split(path.sep).pop().split('.')[0] : null
 
 module.exports.getSourceText = () => {
     filePath = filePath ? path.resolve(filePath) : null
@@ -20,7 +20,7 @@ module.exports.compileAsm = asm => {
     
     const asm_path  = path.join(working_dir, './nasm.asm')
     const obj_path  = path.join(working_dir, './object.o')
-    const exe_path  = path.join(__dirname, `./${fileName}`)
+    const exe_path  = path.join(process.cwd(), `./${fileName}`)
 
     const nasm_cmd  = `nasm -felf64 "${asm_path}" -o "${obj_path}"`
     const link_cmd  = `ld -o "${exe_path}" "${obj_path}"`

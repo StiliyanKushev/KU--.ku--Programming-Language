@@ -18,15 +18,13 @@ print: {
     @out "Hello World"
 }
 
-# define an object variable
-:obj = {
-    :name = "Stiliyan"
-    :age = 18
-    greet: { @out "Hello World" }
-}
-
-
-# everything below this comment is yet to be implemented in the parser
+# objects are not implemented yet
+# define an object variable 
+#:obj = {
+#    :name = "Stiliyan"
+#    :age = 18
+#    greet: { @out "Hello World" }
+#}
 
 if false {
     @out "here"

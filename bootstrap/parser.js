@@ -9,7 +9,7 @@ module.exports = tokens => {
 
     // variables holding the current scope the parser is in
     let INSIDE_FUNCTION = false
-    let INSIDE_LOOP    = false
+    let INSIDE_LOOP     = false
 
     // token validating functions
     const is_bool_expr = expr => expr.type == 'bool' || (expr.type == 'binary' && is_bool_op(expr.operator))
@@ -365,7 +365,7 @@ module.exports = tokens => {
         let prog = []
         while (!tokens.eof() && (rule ? rule() : true)) {
             let _tokens = parse_any()
-            Array.isArray(_tokens) ? prog.push(..._tokens): prog.push(_tokens)
+            Array.isArray(_tokens) ? prog.push(..._tokens) : prog.push(_tokens)
         }
         return { type: 'prog', prog: prog }
     }

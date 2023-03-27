@@ -1,5 +1,5 @@
 module.exports.help = () => {
-    console.log('Usage: node index /path/to/file.sk')
+    console.log('Usage: node index /path/to/file.ku')
     process.exit(0)
 }
 
