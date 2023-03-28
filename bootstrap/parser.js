@@ -116,7 +116,7 @@ module.exports = tokens => {
             }
 
             if(!left){
-                left = parse_call() || parse_prefix() || parse_postfix() || parse_datatypes()
+                left = parse_call() || parse_prefix() || parse_postfix() || parse_datatypes() || parse_typeof()
                 if(!left)       return 
                 if(!is_op())    return
             }
@@ -301,6 +301,19 @@ module.exports = tokens => {
         return tokens.next()
     }
 
+    const parse_typeof = () => {
+        return parse_handler(reject => {
+            if(!is_kw('typeof')) return; skip_kw('typeof')
+            if(!is_var())    unexpected()
+            const name = skip_var().value
+
+            return {
+                type: 'typeof',
+                name: name,
+            }
+        })
+    }
+
     const parse_prefix = () => {
         return parse_handler(reject => {
             if(!is_op('++')) return;    skip_op('++')
@@ -328,6 +341,7 @@ module.exports = tokens => {
     const parse_atom = () => {
         try {
             return (
+                parse_typeof() ||
                 parse_binary() ||
                 parse_prefix() ||
                 parse_postfix() ||
