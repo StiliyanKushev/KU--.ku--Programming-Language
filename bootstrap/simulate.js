@@ -3,15 +3,18 @@ const {
     exit_error
 } = require('./cmd')
 
+// universal function for preparing context of a scope
+const create_context = () => ({
+    variables: new Map(),
+    functions: new Map(),
+    flags: new Set()
+})
+
 // built in "core" variables and functions go here
 const core_sim = new class {
     constructor() {
         this.parent = undefined
-        this.context = {
-            variables: new Map(),
-            functions: new Map(),
-        }
-
+        this.context = create_context()
         this.context.functions.set("out", this.out)
     }
 
@@ -89,6 +92,11 @@ module.exports.simulate_ast = ast => {
             'function does not exist', node, parent)
     }
 
+    const throw_flag_not_exist = (node, parent) => {
+        throw_fatal_error(
+            'flag does not exist', node, parent)
+    }
+
     const throw_variable_already_declared = (node, parent) => {
         throw_fatal_error(
             'variable already declared', node, parent)
@@ -151,6 +159,16 @@ module.exports.simulate_ast = ast => {
         return lookup_function(node, parent.parent, name)
     }
 
+    const lookup_flag = (node, parent, name) => {
+        if(!parent) throw_flag_not_exist(node, parent)
+        if(parent.context.flags.has(name)) {
+            return {
+                parent: parent,
+            }
+        }
+        return lookup_flag(node, parent.parent, name)
+    }
+
     const read_call_function = (node, parent) => {
         const func = lookup_function(node, parent, node.name).value
 
@@ -160,10 +178,7 @@ module.exports.simulate_ast = ast => {
 
         const world = {
             parent: parent,
-            context: {
-                variables: new Map(),
-                functions: new Map(),
-            }
+            context: create_context()
         }
 
         func.vars.forEach((arg_var, i) => {
@@ -289,20 +304,19 @@ module.exports.simulate_ast = ast => {
 
         if(value) {
             read_scope(node.body.prog, parent)
-        } else if(node.else.type == 'if') {
-            read_if(node.else, parent)
-        } else {
-            read_scope(node.else.body.prog, parent)
+        } else if(node.else) {
+            if(node.else.type == 'if') {
+                read_if(node.else, parent)
+            } else {
+                read_scope(node.else.body.prog, parent)
+            }
         }
     }
 
     const read_for = (node, parent) => {
         const world = {
             parent: parent,
-            context: {
-                variables: new Map(),
-                functions: new Map(),
-            }
+            context: create_context()
         }
 
         const var_declare = {
@@ -314,12 +328,20 @@ module.exports.simulate_ast = ast => {
         }
         read_var(var_declare, world)
 
+        // add flag indicating this parent context is a loop
+        // if it's ever removed then the look is "break"'ed
+        world.context.flags.add('loop')
+
         while(
             read_boolean(
                 node.statement,
                 parent, 
                 read_value(node.statement, world))) {
             read_scope(node.body.prog, parent, world.context)
+            if(!world.context.flags.has('loop')) break
+            if(world.context.flags.has('continue')) {
+                world.context.flags.delete('continue')
+            }
             read_value(node.post, world)
 
             // preserve var value before cleanup
@@ -332,11 +354,12 @@ module.exports.simulate_ast = ast => {
     const read_while = (node, parent) => {
         const world = {
             parent: parent,
-            context: {
-                variables: new Map(),
-                functions: new Map(),
-            }
+            context: create_context()
         }
+
+        // add flag indicating this parent context is a loop
+        // if it's ever removed then the look is "break"'ed
+        world.context.flags.add('loop')
 
         while(
             read_boolean(
@@ -344,6 +367,10 @@ module.exports.simulate_ast = ast => {
                 parent, 
                 read_value(node.statement, world))) {
             read_scope(node.body.prog, parent, world.context)
+            if(!world.context.flags.has('loop')) break
+            if(world.context.flags.has('continue')) {
+                world.context.flags.delete('continue')
+            }
             world.context.variables = new Map()
         }
     }
@@ -384,16 +411,23 @@ module.exports.simulate_ast = ast => {
         return read_value(node.value, parent)
     }
 
+    const read_break = (node, parent) => {
+        lookup_flag(node, parent, 'loop').parent.context.flags.delete('loop')
+    }
+
+    const read_continue = (node, parent) => {
+        lookup_flag(node, parent, 'loop').parent.context.flags.add('continue')
+    }
+
     const read_scope = (prog, opt_parent, opt_context) => {
         const world = {
             parent: opt_parent,
-            context: opt_context || {
-                variables: new Map(),
-                functions: new Map(),
-            }
+            context: opt_context || create_context()
         }
 
         for(let node of prog) {
+            if(world.context.flags.has('continue')) break
+
             if(node.type == 'func') {
                 read_func(node, world)
             } else if(node.type == 'var') {
@@ -412,6 +446,10 @@ module.exports.simulate_ast = ast => {
                 read_prefix(node, world)
             } else if(node.type == 'ret') {
                 return read_ret(node, world)
+            } else if(node.type == 'kw' && node.value == 'break') {
+                return read_break(node, world)
+            } else if(node.type == 'kw' && node.value == 'continue') {
+                return read_continue(node, world)
             } else if(node.type == 'internal') {
                 // only for core functionality
                 exec_internal(node, world)

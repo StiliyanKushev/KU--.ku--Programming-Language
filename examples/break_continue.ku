@@ -1,0 +1,11 @@
+for i = 15, i >= 0, i-- {
+    if i > 10 && i < 13 {
+        continue
+    }
+
+    if i == 5 {
+        break
+    }
+
+    @out i
+}

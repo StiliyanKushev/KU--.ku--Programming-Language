@@ -336,7 +336,9 @@ module.exports = tokens => {
                          parse_prefix() ||
                          parse_postfix()
             
+            INSIDE_LOOP = true
             const body = parse_body()
+            INSIDE_LOOP = false
 
             return {
                 type      : 'for',

@@ -1,0 +1,10 @@
+:target = 10
+
+:a = 1 :b = 1
+
+while b < target {
+    @out b
+    :c = b
+    b = b + a
+    a = c
+}

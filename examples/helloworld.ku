@@ -1,18 +1,2 @@
-# this function prints the type of a value
-printType: val {
-    if typeof val == "string" {
-        @out "string"
-    }
-    else if typeof val == "number" {
-        @out "number"
-    }
-    else if typeof val == "boolean" {
-        @out "boolean"
-    }
-    else if typeof val == "object" {
-        @out "object"
-    }
-
-    # now print the value
-    @out val
-}
+:string = "Hello World!"
+@out string
