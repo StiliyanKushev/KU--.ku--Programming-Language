@@ -1,26 +1,15 @@
 const fs    = require('fs')
 const os    = require('os')
 const path  = require('path')
-const cmd   = require('./cmd')
 const cp    = require('child_process')
 
-let filePath = process.argv[2]
-let fileName = filePath ? filePath.split(path.sep).pop().split('.')[0] : null
-
-module.exports.getSourceText = () => {
-    filePath = filePath ? path.resolve(filePath) : null
-    if(!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile || !filePath.endsWith('.ku'))
-        return cmd.error('Invalid source file path')
-    return fs.readFileSync(filePath).toString()
-}
-
-module.exports.compileAsm = asm => {
+module.exports.compile_asm = (asm, output) => {
     let working_dir = path.join(os.tmpdir(), `./${Math.random()}`)
     fs.mkdirSync(working_dir)
     
     const asm_path  = path.join(working_dir, './nasm.asm')
     const obj_path  = path.join(working_dir, './object.o')
-    const exe_path  = path.join(process.cwd(), `./${fileName}`)
+    const exe_path  = path.join(process.cwd(), `./${output}`)
 
     const nasm_cmd  = `nasm -felf64 "${asm_path}" -o "${obj_path}"`
     const link_cmd  = `ld -o "${exe_path}" "${obj_path}"`
@@ -35,7 +24,7 @@ module.exports.compileAsm = asm => {
     catch (err) {console.log(err.stderr.toString())}
 }
 
-module.exports.generateAsm = ast => {
+module.exports.generate_asm = ast => {
     console.dir(ast, { depth: null })
 
     return `

@@ -27,7 +27,7 @@ module.exports = tokens => {
     const skip_punc   = ch => is_punc(ch) ? tokens.next() : tokens.croak('Expecting punctuation: \'' + ch + '\'')
     const skip_kw     = kw => is_kw(kw) ? tokens.next() : tokens.croak('Expecting keyword: \'' + kw + '\'')
     const skip_op     = op => is_op(op) ? tokens.next() : tokens.croak('Expecting operator: \'' + op + '\'')
-    
+
     // helper functions 
     const unexpected = () => tokens.croak('Unexpected token: ' + JSON.stringify(tokens.peek()))
 
@@ -61,14 +61,37 @@ module.exports = tokens => {
     const parse_datatypes = (tok, allowVar = true) => {
         return parse_handler(reject => {
             const current = tok || tokens.next()
+            const location = tokens.save()
             if(current.type == 'var' && !allowVar) return
-            if(is_val(current)) return current
-            if(current.value == 'true' || current.value == 'false') return { type: 'bool', value: current.value == 'true' }
+            if(is_val(current)) return { location, ...current }
+            if(current.value == 'true' || current.value == 'false') {
+                return { 
+                    type: 'bool', 
+                    value: current.value == 'true', 
+                    location: location 
+                }
+            }
+        })
+    }
+
+    const parse_signed = () => {
+        return parse_handler(reject => {
+            const location = tokens.save()
+            if(!is_op('-') && !is_op('+')) return; const op = tokens.next()
+            const expr = parse_datatypes() || parse_call()
+            if(!expr) return
+            return {
+                type: 'signed',
+                op: op,
+                value: expr,
+                location: location
+            }
         })
     }
 
     const parse_assign = () => {
         return parse_handler(reject => {
+            const location = tokens.save()
             if(!is_var())       return; const name = skip_var()
             if(!is_op('='))     return
 
@@ -78,15 +101,18 @@ module.exports = tokens => {
                 type: 'var',
                 mode: 'assign',
                 name: name.value,
-                value: parse_atom()
+                value: parse_atom(),
+                location: location
             }
         })
     }
 
     const parse_declare = () => {
         return parse_handler(reject => {
-            if(!is_punc(':'))   return;              skip_punc(':')
+            
+            if(!is_punc(':'))   return; skip_punc(':')
             if(!is_var())       return; const name = skip_var()
+            const location = tokens.save()
 
             if(!is_op('=')) return {
                 type: 'var',
@@ -101,13 +127,16 @@ module.exports = tokens => {
                 type: 'var',
                 mode: 'declare',
                 name: name.value,
-                value: parse_atom()
+                value: parse_atom(),
+                location: location
             }
         })
     }
 
     const parse_binary = (left, prev_prec = 0) => {
         return parse_handler(reject => {
+            const location = tokens.save()
+            
             if(is_punc('(') && !left){
                 tokens.next()
                 const exp = parse_atom()
@@ -116,7 +145,12 @@ module.exports = tokens => {
             }
 
             if(!left){
-                left = parse_call() || parse_prefix() || parse_postfix() || parse_datatypes() || parse_typeof()
+                left =  parse_call() || 
+                        parse_prefix() || 
+                        parse_postfix() || 
+                        parse_datatypes() ||
+                        parse_signed() || 
+                        parse_typeof()
                 if(!left)       return 
                 if(!is_op())    return
             }
@@ -133,7 +167,14 @@ module.exports = tokens => {
                 type     : 'binary',
                 operator : tokens.next().value,
                 left     : left,
-                right    : parse_binary(parse_prefix() || parse_postfix() || parse_datatypes(), PRECEDENCE[op])
+                right    : parse_binary(
+                    parse_call() || 
+                    parse_prefix() || 
+                    parse_postfix() || 
+                    parse_datatypes() || 
+                    parse_signed() ||
+                    parse_typeof(), PRECEDENCE[op]),
+                location : location
             }, prev_prec)
             return left
         })
@@ -142,9 +183,13 @@ module.exports = tokens => {
     const parse_function = () => {
         return parse_handler(reject => {
             if(!is_var())       return; const name = skip_var().value
-            if(!is_punc(':'))   return;              skip_punc(':')
+            if(!is_punc(':'))   return; skip_punc(':')
+            const location = tokens.save()
 
-            const vars = parse_delimited(is_var, tokens.next, ',')
+            const vars = parse_delimited(is_var, () => {
+                const location = tokens.save()
+                return { ...tokens.next(), location }
+            }, ',')
 
             INSIDE_FUNCTION = true
             const body = parse_body()
@@ -155,6 +200,7 @@ module.exports = tokens => {
                 vars: vars,
                 name: name,
                 body: body,
+                location: location
             }
         })
     }
@@ -163,6 +209,7 @@ module.exports = tokens => {
         return parse_handler(reject => {
             if(!is_punc('@')) return; skip_punc('@')
             const name = skip_var().value
+            const location = tokens.save()
             const args = parse_delimited(() => {
                 if(tokens.eof()) return false
                 const _pre_args = tokens.save()
@@ -175,6 +222,7 @@ module.exports = tokens => {
                 type: 'call',
                 name: name,
                 args: args,
+                location: location
             }
         }) 
     }
@@ -184,9 +232,11 @@ module.exports = tokens => {
 
         return parse_handler(reject => {
             if(!is_kw('ret')) return; skip_kw('ret')
+            const location = tokens.save()
             return {
                 type: 'ret',
-                value: parse_atom()
+                value: parse_atom(),
+                location: location
             }
         })
     }
@@ -194,8 +244,13 @@ module.exports = tokens => {
     const parse_if = () => {
         return parse_handler(reject => {
             if(!is_kw('if')) return; skip_kw('if')
+            const location = tokens.save()
 
-            const statement = parse_binary() || parse_datatypes()
+            const statement = 
+                parse_binary() || 
+                parse_datatypes() || 
+                parse_signed() ||
+                parse_call()
 
             // return if it's not a boolean or a boolean binary
             if(!is_bool_expr(statement)) {
@@ -211,19 +266,23 @@ module.exports = tokens => {
                 type        : 'if',
                 statement   : statement,
                 body        : body,
-                else        : _else
+                else        : _else,
+                location    : location
             }
         })
     }
 
     const parse_else = () => {
         return parse_handler(reject => {
-            if(!is_kw('else')) return;  skip_kw('else')
+            if(!is_kw('else')) return; skip_kw('else')
+            const location = tokens.save()
+
             if(is_punc('{')) {
                 const body = parse_body()
                 return {
                     type: 'else',
-                    body: body
+                    body: body,
+                    location: location
                 }
             }
 
@@ -235,8 +294,13 @@ module.exports = tokens => {
     const parse_while = () => {
         return parse_handler(reject => {
             if(!is_kw('while')) return; skip_kw('while')
+            const location = tokens.save()
 
-            const statement = parse_binary() || parse_datatypes()
+            const statement = 
+                parse_binary() || 
+                parse_datatypes() || 
+                parse_signed() ||
+                parse_call()
 
             // return if it's not a boolean or a boolean binary
             if(!is_bool_expr(statement)) {
@@ -252,7 +316,8 @@ module.exports = tokens => {
             return {
                 type        : 'while',
                 statement   : statement,
-                body        : body
+                body        : body,
+                location    : location
             }
         })
     }
@@ -260,9 +325,11 @@ module.exports = tokens => {
     const parse_for = () => {
         return parse_handler(reject => {
             if(!is_kw('for')) return;       skip_kw('for')
+            const location = tokens.save()
             const _var = parse_assign();    skip_punc(','); const s_var = tokens.save()
             if(!_var)                       unexpected()
 
+            // todo: support more stuff than binary?
             const _con = parse_binary();    skip_punc(',')
             if(!_con)                       unexpected()
             
@@ -272,10 +339,10 @@ module.exports = tokens => {
                 unexpected()
             }
 
-            const post =    parse_assign() ||
-                            parse_call()   ||
-                            parse_prefix() ||
-                            parse_postfix()
+            const post = parse_assign() ||
+                         parse_call()   ||
+                         parse_prefix() ||
+                         parse_postfix()
             
             const body = parse_body()
 
@@ -284,56 +351,75 @@ module.exports = tokens => {
                 var       : _var,
                 condition : _con,
                 post      : post,
-                body      : body
+                body      : body,
+                location  : location
             }
         })
     }
 
     const parse_break = () => {
         if(!is_kw('break')) return
-        if(!INSIDE_LOOP)   unexpected()
-        return tokens.next()
+        const location = tokens.save()
+        if(!INSIDE_LOOP) unexpected()
+        return { ...tokens.next(), location }
     }
 
     const parse_continue = () => {
         if(!is_kw('continue')) return
-        if(!INSIDE_LOOP)   unexpected()
-        return tokens.next()
+        const location = tokens.save()
+        if(!INSIDE_LOOP) unexpected()
+        return { ...tokens.next(), location }
     }
 
     const parse_typeof = () => {
         return parse_handler(reject => {
             if(!is_kw('typeof')) return; skip_kw('typeof')
-            if(!is_var())    unexpected()
+            const location = tokens.save()
+            if(!is_var()) unexpected()
             const name = skip_var().value
 
             return {
                 type: 'typeof',
                 name: name,
+                location: location
             }
         })
     }
 
     const parse_prefix = () => {
         return parse_handler(reject => {
-            if(!is_op('++')) return;    skip_op('++')
-            if(!is_var())    unexpected()
+            if(!is_op('++') && !is_op('--')) return;
+            const location = tokens.save()
+            let op     
+            if(is_op('++'))         op = skip_op('++')
+            else if(is_op('--'))    op = skip_op('--')
+            if(!is_var())           unexpected()
             const name = skip_var().value
 
             return {
                 type: 'prefix',
                 name: name,
+                op: op,
+                location: location
             }
         })
     }
 
     const parse_postfix = () => {
         return parse_handler(reject => {
-            if(!is_var())    return;    const name = skip_var().value
-            if(!is_op('++')) return;    skip_op('++')
+            if(!is_var())                    return; const name = skip_var().value
+            if(!is_op('++') && !is_op('--')) return;
+
+            const location = tokens.save()
+            let op     
+            if(is_op('++'))         op = skip_op('++')
+            else if(is_op('--'))    op = skip_op('--')
+
             return {
                 type: 'postfix',
                 name: name,
+                op: op,
+                location: location
             }
         })
     }
@@ -348,6 +434,7 @@ module.exports = tokens => {
                 parse_return() ||
                 parse_call() ||
                 parse_datatypes() || 
+                parse_signed() ||
                 undefined
             )
         } catch { unexpected() }
