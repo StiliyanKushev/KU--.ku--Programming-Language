@@ -239,7 +239,7 @@ module.exports.simulate_ast = ast => {
                 throw_variable_already_declared(node, parent)
             }
             parent.context.variables.set(
-                node.name, read_value(node.value, parent))
+                node.name, node.value ? read_value(node.value, parent) : 0)
         }
         else if(node.mode == 'assign') {
             lookup_variable(node, parent, node.name)
