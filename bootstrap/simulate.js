@@ -322,16 +322,30 @@ module.exports.simulate_ast = ast => {
                 read_value(node.statement, world))) {
             read_scope(node.body.prog, parent, world.context)
             read_value(node.post, world)
+
+            // preserve var value before cleanup
+            const preserve = lookup_variable({}, world, node.var.name).value
+            world.context.variables = new Map()
+            world.context.variables.set(node.var.name, preserve)
         }
     }
 
     const read_while = (node, parent) => {
+        const world = {
+            parent: parent,
+            context: {
+                variables: new Map(),
+                functions: new Map(),
+            }
+        }
+
         while(
             read_boolean(
                 node.statement,
                 parent, 
-                read_value(node.statement, parent))) {
-            read_scope(node.body.prog, parent)
+                read_value(node.statement, world))) {
+            read_scope(node.body.prog, parent, world.context)
+            world.context.variables = new Map()
         }
     }
 
