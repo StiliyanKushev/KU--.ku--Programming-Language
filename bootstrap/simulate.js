@@ -124,6 +124,11 @@ module.exports.simulate_ast = ast => {
             "invalid prefix non numeric value", node, parent)
     }
 
+    const throw_statement_not_boolean = (node, parent) => {
+        throw_fatal_error(
+            "statement is not a boolean", node, parent)
+    }
+
     const lookup_variable = (node, parent, name) => {
         if(!parent) throw_variable_not_exist(node, parent)
         if(parent.context.variables.has(name)) {
@@ -269,7 +274,21 @@ module.exports.simulate_ast = ast => {
     }
 
     const read_if = (node, parent) => {
-        // todo: implement
+        const value = read_value(node.statement, parent)
+
+        if(value === 1 || (typeof value == 'boolean' && value == true)) {
+            value = true
+        } else if(typeof value != 'boolean') {
+            throw_statement_not_boolean(node, parent)
+        }
+
+        if(value) {
+            read_scope(node.body.prog, parent)
+        } else if(node.else.type == 'if') {
+            read_if(node.else, parent)
+        } else {
+            read_scope(node.else.body.prog, parent)
+        }
     }
 
     const read_for = (node, parent) => {
@@ -300,7 +319,7 @@ module.exports.simulate_ast = ast => {
         const variable = lookup_variable(node, parent, node.name)
         
         if(typeof variable.value !== 'number') {
-            throw_postfix_non_numeric(node, parent)
+            throw_prefix_non_numeric(node, parent)
         }
 
         if(node.op.value == '++') {

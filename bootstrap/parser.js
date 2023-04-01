@@ -252,13 +252,6 @@ module.exports = tokens => {
                 parse_signed() ||
                 parse_call()
 
-            // return if it's not a boolean or a boolean binary
-            if(!is_bool_expr(statement)) {
-                reject()
-                skip_kw('if')
-                unexpected()
-            }
-            
             const body = parse_body()
             const _else = parse_else()
 
