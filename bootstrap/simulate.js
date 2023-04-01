@@ -114,10 +114,23 @@ module.exports.simulate_ast = ast => {
             "invalid signed non numeric value", node, parent)
     }
 
+    const throw_postfix_non_numeric = (node, parent) => {
+        throw_fatal_error(
+            "invalid postfix non numeric value", node, parent)
+    }
+
+    const throw_prefix_non_numeric = (node, parent) => {
+        throw_fatal_error(
+            "invalid prefix non numeric value", node, parent)
+    }
+
     const lookup_variable = (node, parent, name) => {
         if(!parent) throw_variable_not_exist(node, parent)
         if(parent.context.variables.has(name)) {
-            return parent.context.variables.get(name)
+            return {
+                parent: parent,
+                value: parent.context.variables.get(name)
+            }
         }
         return lookup_variable(node, parent.parent, name)
     }
@@ -125,13 +138,16 @@ module.exports.simulate_ast = ast => {
     const lookup_function = (node, parent, name) => {
         if(!parent) throw_function_not_exist(node, parent)
         if(parent.context.functions.has(name)) {
-            return parent.context.functions.get(name)
+            return {
+                parent: parent,
+                value: parent.context.functions.get(name)
+            }
         }
         return lookup_function(node, parent.parent, name)
     }
 
     const read_call_function = (node, parent) => {
-        const func = lookup_function(node, parent, node.name)
+        const func = lookup_function(node, parent, node.name).value
 
         if(func.vars.length > node.args.length) {
             throw_function_invalid_arguments_count(node, parent)
@@ -169,12 +185,16 @@ module.exports.simulate_ast = ast => {
         } else if(node.type == 'binary') {
             return read_binary(node, parent)
         } else if(node.type == 'var') {
-            return lookup_variable(node, parent, node.value)
+            return lookup_variable(node, parent, node.value).value
         } else if(node.type == 'call') {
             return read_call_function(node, parent)
         } else if(node.type == 'signed') {
             return read_signed(node, parent)
-        }  else {
+        } else if(node.type == 'postfix') {
+            return read_postfix(node, parent)
+        } else if(node.type == 'prefix') {
+            return read_prefix(node, parent)
+        } else {
             throw_unknown_node_type(node, parent)
         }
     }
@@ -261,11 +281,35 @@ module.exports.simulate_ast = ast => {
     }
 
     const read_postfix = (node, parent) => {
-        // todo: implement
+        const variable = lookup_variable(node, parent, node.name)
+        
+        if(typeof variable.value !== 'number') {
+            throw_postfix_non_numeric(node, parent)
+        }
+
+        if(node.op.value == '++') {
+            variable.parent.context.variables.set(node.name, variable.value + 1)
+        } else if(node.op.value == '--') {
+            variable.parent.context.variables.set(node.name, variable.value - 1)
+        }
+
+        return variable.value
     }
 
     const read_prefix = (node, parent) => {
-        // todo: implement
+        const variable = lookup_variable(node, parent, node.name)
+        
+        if(typeof variable.value !== 'number') {
+            throw_postfix_non_numeric(node, parent)
+        }
+
+        if(node.op.value == '++') {
+            variable.parent.context.variables.set(node.name, variable.value + 1)
+        } else if(node.op.value == '--') {
+            variable.parent.context.variables.set(node.name, variable.value - 1)
+        }
+
+        return variable.parent.context.variables.get(node.name)
     }
 
     const read_ret = (node, parent) => {
