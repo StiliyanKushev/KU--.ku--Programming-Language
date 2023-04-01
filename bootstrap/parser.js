@@ -317,20 +317,19 @@ module.exports = tokens => {
 
     const parse_for = () => {
         return parse_handler(reject => {
-            if(!is_kw('for')) return;       skip_kw('for')
+            if(!is_kw('for')) return; skip_kw('for')
             const location = tokens.save()
-            const _var = parse_assign();    skip_punc(','); const s_var = tokens.save()
-            if(!_var)                       unexpected()
+            const _var = parse_assign(); skip_punc(',');
+            if(!_var) unexpected()
 
-            // todo: support more stuff than binary?
-            const _con = parse_binary();    skip_punc(',')
-            if(!_con)                       unexpected()
-            
-            if(!is_bool_expr(_con)){
-                reject()
-                tokens.update(s_var)
-                unexpected()
-            }
+            const statement = 
+                parse_binary() || 
+                parse_datatypes() || 
+                parse_signed() ||
+                parse_call()
+
+            skip_punc(',')
+            if(!statement) unexpected()
 
             const post = parse_assign() ||
                          parse_call()   ||
@@ -342,7 +341,7 @@ module.exports = tokens => {
             return {
                 type      : 'for',
                 var       : _var,
-                condition : _con,
+                statement : statement,
                 post      : post,
                 body      : body,
                 location  : location

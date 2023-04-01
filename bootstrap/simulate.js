@@ -273,14 +273,20 @@ module.exports.simulate_ast = ast => {
         }
     }
 
-    const read_if = (node, parent) => {
-        const value = read_value(node.statement, parent)
-
+    const read_boolean = (node, parent, value) => {
         if(value === 1 || (typeof value == 'boolean' && value == true)) {
-            value = true
+            return true
         } else if(typeof value != 'boolean') {
             throw_statement_not_boolean(node, parent)
         }
+        return false
+    }
+
+    const read_if = (node, parent) => {
+        const value = read_boolean(
+            node.statement, 
+            parent, 
+            read_value(node.statement, parent))
 
         if(value) {
             read_scope(node.body.prog, parent)
@@ -292,11 +298,41 @@ module.exports.simulate_ast = ast => {
     }
 
     const read_for = (node, parent) => {
-        // todo: implement
+        const world = {
+            parent: parent,
+            context: {
+                variables: new Map(),
+                functions: new Map(),
+            }
+        }
+
+        const var_declare = {
+            type: 'var',
+            mode: 'declare',
+            name: node.var.name,
+            value: node.var.value,
+            location: node.var.location
+        }
+        read_var(var_declare, world)
+
+        while(
+            read_boolean(
+                node.statement,
+                parent, 
+                read_value(node.statement, world))) {
+            read_scope(node.body.prog, parent, world.context)
+            read_value(node.post, world)
+        }
     }
 
     const read_while = (node, parent) => {
-        // todo: implement
+        while(
+            read_boolean(
+                node.statement,
+                parent, 
+                read_value(node.statement, parent))) {
+            read_scope(node.body.prog, parent)
+        }
     }
 
     const read_postfix = (node, parent) => {
