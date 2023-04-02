@@ -95,6 +95,7 @@ const core_sim = new class {
         })
    }
 
+   // converts boolean value to string
    get bol2str() {
         return this.make_f({
             name: 'out',
@@ -107,6 +108,7 @@ const core_sim = new class {
         })
     }
     
+    // converts number value to string
     get num2str() {
         return this.make_f({
             name: 'out',
@@ -119,6 +121,7 @@ const core_sim = new class {
         })
     }
 
+    // converts string value to number
     get str2num() {
         return this.make_f({
             name: 'out',
@@ -132,6 +135,7 @@ const core_sim = new class {
         })
    }
    
+   // converts string value to boolean
    get str2bol() {
         return this.make_f({
             name: 'out',
@@ -253,15 +257,15 @@ module.exports.simulate_ast = ast => {
         return lookup_variable(node, parent.parent, name)
     }
 
-    const lookup_function = (node, parent, name) => {
-        if(!parent) throw_function_not_exist(node, parent)
+    const lookup_function = (node, parent, name, opt_throw = true) => {
+        if(!parent) return opt_throw ? throw_function_not_exist(node, parent) : undefined
         if(parent.context.functions.has(name)) {
             return {
                 parent: parent,
                 value: parent.context.functions.get(name)
             }
         }
-        return lookup_function(node, parent.parent, name)
+        return lookup_function(node, parent.parent, name, opt_throw)
     }
 
     const lookup_flag = (node, parent, name) => {
@@ -335,7 +339,7 @@ module.exports.simulate_ast = ast => {
     }
 
     const read_func = (node, parent) => {
-        if(parent.context.functions.has(node.name)) {
+        if(lookup_function(node, parent, node.name, false)) {
             throw_function_already_declared(node, parent)
         }
         parent.context.functions.set(node.name, node)
