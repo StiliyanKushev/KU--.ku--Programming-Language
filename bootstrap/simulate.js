@@ -7,7 +7,7 @@ const {
 const create_context = () => ({
     variables: new Map(),
     functions: new Map(),
-    flags: new Set()
+    flags: new Map()
 })
 
 // built in "core" variables and functions go here
@@ -15,10 +15,19 @@ const core_sim = new class {
     constructor() {
         this.parent = undefined
         this.context = create_context()
+
+        // stdio 
         this.context.functions.set("out", this.out)
+        this.context.functions.set("outln", this.outln)
+
+        // cast 
+        this.context.functions.set("bol2str", this.bol2str)
+        this.context.functions.set("num2str", this.num2str)
+        this.context.functions.set("str2num", this.str2num)
+        this.context.functions.set("str2bol", this.str2bol)
     }
 
-    make_f({ name, vars, code_func }) {
+    make_f({ name, vars, code_func, ret_type }) {
         return {
             type: 'func',
             vars: vars,
@@ -34,11 +43,15 @@ const core_sim = new class {
                 pos: 'internal', 
                 line: 'internal', 
                 col: 'internal' 
+            },
+            ret_type: {
+                type: 'kw',
+                value: ret_type
             }
         }
     }
 
-    make_arg(name) {
+    make_arg(name, type) {
         return {
             type: 'var',
             value: name,
@@ -46,21 +59,95 @@ const core_sim = new class {
                 pos: 'internal', 
                 line: 'internal', 
                 col: 'internal' 
-            }
+            },
+            arg_type: {
+                type: 'kw',
+                value: type
+            } 
         }
     }
 
     // prints to the stdout
     get out() {
-         return this.make_f({
+        return this.make_f({
             name: 'out',
-            vars: [ this.make_arg('data') ],
+            vars: [ this.make_arg('data', 'str') ],
+            code_func: function () {
+                const data = '' + this.context.variables.get('data')
+                process.stdout.write(typeof data == 'undefined' ? '' : data)
+                return true
+            },
+            ret_type: 'bol'
+        })
+    }
+
+    // prints to the stdout and writes new line
+    get outln() {
+        return this.make_f({
+            name: 'outln',
+            vars: [ this.make_arg('data', 'str') ],
+            code_func: function () {
+               const data = '' + this.context.variables.get('data')
+               process.stdout.write(typeof data == 'undefined' ? '\n' : data + '\n')
+               return true
+            },
+            ret_type: 'bol'
+        })
+   }
+
+   get bol2str() {
+        return this.make_f({
+            name: 'out',
+            vars: [ this.make_arg('data', 'bol') ],
             code_func: function () {
                 const data = this.context.variables.get('data')
-                console.log(typeof data == 'undefined' ? '' : data)
-            }
-         })
+                return '' + data
+            },
+            ret_type: 'str'
+        })
     }
+    
+    get num2str() {
+        return this.make_f({
+            name: 'out',
+            vars: [ this.make_arg('data', 'num') ],
+            code_func: function () {
+                const data = this.context.variables.get('data')
+                return '' + data
+            },
+            ret_type: 'str'
+        })
+    }
+
+    get str2num() {
+        return this.make_f({
+            name: 'out',
+            vars: [ this.make_arg('data', 'str') ],
+            code_func: function () {
+                const data = this.context.variables.get('data')
+                return Number(data)
+                // todo: throw error
+            },
+            ret_type: 'num'
+        })
+   }
+   
+   get str2bol() {
+        return this.make_f({
+            name: 'out',
+            vars: [ this.make_arg('data', 'str') ],
+            code_func: function () {
+                const data = this.context.variables.get('data')
+                if(data.toLowerCase().trim() == 'true') {
+                    return true
+                } else {
+                    return false
+                }
+                // todo: throw error
+            },
+            ret_type: 'bol'
+        })
+   }
 }
 
 // only used to execute internal code from "core"
@@ -68,11 +155,11 @@ const exec_internal = (node, parent) => {
     const vm_context = vm.createContext({
         ...parent,
         // context is empty initially
-        console: console
+        process: process
     })
     const result = vm.runInNewContext(node.code, vm_context)
     return result
-}
+}   
 
 module.exports.simulate_ast = ast => {
     console.dir(ast, { depth: null })
@@ -137,6 +224,24 @@ module.exports.simulate_ast = ast => {
             "statement is not a boolean", node, parent)
     }
 
+    const throw_invalid_value_type = (node, parent) => {
+        throw_fatal_error(
+            "invalid value type", node, parent
+        )
+    }
+
+    const throw_cannot_assign_different_type = (node, parent) => {
+        throw_fatal_error(
+            "cannot assign different type", node, parent
+        )
+    }
+
+    const type_default_value = (value_type) => {
+        if(value_type == 'number') return 0
+        if(value_type == 'boolean') return false
+        if(value_type == 'string') return ''
+    }
+
     const lookup_variable = (node, parent, name) => {
         if(!parent) throw_variable_not_exist(node, parent)
         if(parent.context.variables.has(name)) {
@@ -181,13 +286,17 @@ module.exports.simulate_ast = ast => {
             context: create_context()
         }
 
+        // store the function return type as a flag so we can check in "read_ret"
+        world.context.flags.set('ret_type', func.ret_type)
+
         func.vars.forEach((arg_var, i) => {
             const arg_var_declare = {
                 type: 'var',
                 mode: 'declare',
                 name: arg_var.value,
                 value: node.args[i],
-                location: arg_var.location
+                location: arg_var.location,
+                value_type: arg_var.arg_type
             }
             read_var(arg_var_declare, world)
         })
@@ -195,25 +304,31 @@ module.exports.simulate_ast = ast => {
         return read_scope(func.body.prog, parent, world.context)
     }
 
-    const read_value = (node, parent) => {
+    const read_value = (node, parent, opt_value_type) => {
+        const check_value_type = value => {
+            if(!opt_value_type) return value
+            if(typeof value == opt_value_type) return value
+            throw_invalid_value_type(node, parent)
+        }
+
         if(node.type == 'num') {
-            return node.value
+            return check_value_type(node.value)
         } else if(node.type == 'str') {
-            return node.value
+            return check_value_type(node.value)
         } else if(node.type == 'bool') {
-            return node.value
+            return check_value_type(node.value)
         } else if(node.type == 'binary') {
-            return read_binary(node, parent)
+            return check_value_type(read_binary(node, parent))
         } else if(node.type == 'var') {
-            return lookup_variable(node, parent, node.value).value
+            return check_value_type(lookup_variable(node, parent, node.value).value)
         } else if(node.type == 'call') {
-            return read_call_function(node, parent)
+            return check_value_type(read_call_function(node, parent))
         } else if(node.type == 'signed') {
-            return read_signed(node, parent)
+            return check_value_type(read_signed(node, parent))
         } else if(node.type == 'postfix') {
-            return read_postfix(node, parent)
+            return check_value_type(read_postfix(node, parent))
         } else if(node.type == 'prefix') {
-            return read_prefix(node, parent)
+            return check_value_type(read_prefix(node, parent))
         } else {
             throw_unknown_node_type(node, parent)
         }
@@ -273,17 +388,27 @@ module.exports.simulate_ast = ast => {
         } 
     }
 
-    const read_var = (node, parent) => {
+    const read_var = (node, parent) => {        
         if(node.mode == 'declare') {
             if(parent.context.variables.has(node.name)) {
                 throw_variable_already_declared(node, parent)
             }
-            parent.context.variables.set(
-                node.name, node.value ? read_value(node.value, parent) : 0)
+            let value_type = read_type(node.value_type)
+            let value = node.value ?
+                read_value(node.value, parent, value_type) :
+                type_default_value(value_type)
+            parent.context.variables.set(node.name, value)
         }
         else if(node.mode == 'assign') {
-            lookup_variable(node, parent, node.name).parent.context.variables.set(
-                node.name, read_value(node.value, parent))
+            const found_var = lookup_variable(node, parent, node.name) 
+            const new_value = read_value(node.value, parent)
+
+            if(typeof new_value != typeof found_var.value) {
+                throw_cannot_assign_different_type(node, parent)
+            }
+
+            found_var.parent.context.variables.set(
+                node.name, new_value)
         }
     }
 
@@ -324,13 +449,14 @@ module.exports.simulate_ast = ast => {
             mode: 'declare',
             name: node.var.name,
             value: node.var.value,
-            location: node.var.location
+            location: node.var.location,
+            value_type: { type: 'kw', value: 'num' }
         }
         read_var(var_declare, world)
 
         // add flag indicating this parent context is a loop
-        // if it's ever removed then the look is "break"'ed
-        world.context.flags.add('loop')
+        // if it's ever removed then the loop is "break"'ed
+        world.context.flags.set('loop')
 
         while(
             read_boolean(
@@ -358,8 +484,8 @@ module.exports.simulate_ast = ast => {
         }
 
         // add flag indicating this parent context is a loop
-        // if it's ever removed then the look is "break"'ed
-        world.context.flags.add('loop')
+        // if it's ever removed then the loop is "break"'ed
+        world.context.flags.set('loop')
 
         while(
             read_boolean(
@@ -407,8 +533,18 @@ module.exports.simulate_ast = ast => {
         return variable.parent.context.variables.get(node.name)
     }
 
+    const read_type = (node, parent) => {
+        if(node.value == 'num') {
+            return typeof 0
+        } else if(node.value == 'bol') {
+            return typeof true
+        } else if(node.value == 'str') {
+            return typeof ''
+        }
+    }
+
     const read_ret = (node, parent) => {
-        return read_value(node.value, parent)
+        return read_value(node.value, parent, read_type(parent.context.flags.get('ret_type')))
     }
 
     const read_break = (node, parent) => {
@@ -416,7 +552,7 @@ module.exports.simulate_ast = ast => {
     }
 
     const read_continue = (node, parent) => {
-        lookup_flag(node, parent, 'loop').parent.context.flags.add('continue')
+        lookup_flag(node, parent, 'loop').parent.context.flags.set('continue')
     }
 
     const read_scope = (prog, opt_parent, opt_context) => {
@@ -452,7 +588,7 @@ module.exports.simulate_ast = ast => {
                 return read_continue(node, world)
             } else if(node.type == 'internal') {
                 // only for core functionality
-                exec_internal(node, world)
+                return exec_internal(node, world)
             } else {
                 throw_unknown_node_type(node, world)
             }

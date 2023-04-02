@@ -21,12 +21,14 @@ module.exports = tokens => {
     const is_punc      = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) }
     const is_kw        = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) }
     const is_op        = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) }
-    
+    const is_type      = () => is_kw('num') || is_kw('str') || is_kw('bol')
+
     // token skipping functions
     const skip_var    = () => is_var() ? tokens.next() : tokens.croak('Expecting variable name:')
     const skip_punc   = ch => is_punc(ch) ? tokens.next() : tokens.croak('Expecting punctuation: \'' + ch + '\'')
     const skip_kw     = kw => is_kw(kw) ? tokens.next() : tokens.croak('Expecting keyword: \'' + kw + '\'')
     const skip_op     = op => is_op(op) ? tokens.next() : tokens.croak('Expecting operator: \'' + op + '\'')
+    const skip_type   = () => is_type() ? tokens.next() : tokens.croak('Expecting type name:')
 
     // helper functions 
     const unexpected = () => tokens.croak('Unexpected token: ' + JSON.stringify(tokens.peek()))
@@ -109,16 +111,18 @@ module.exports = tokens => {
 
     const parse_declare = () => {
         return parse_handler(reject => {
-            
             if(!is_punc(':'))   return; skip_punc(':')
             if(!is_var())       return; const name = skip_var()
+            if(!is_op('/'))     return; skip_op('/')
+            if(!is_type())      return; const value_type = skip_type()
             const location = tokens.save()
 
             if(!is_op('=')) return {
                 type: 'var',
                 mode: 'declare',
                 name: name.value,
-                value: undefined
+                value: undefined,
+                value_type: value_type
             }
 
             skip_op('=')
@@ -128,6 +132,7 @@ module.exports = tokens => {
                 mode: 'declare',
                 name: name.value,
                 value: parse_atom(),
+                value_type: value_type,
                 location: location
             }
         })
@@ -184,11 +189,15 @@ module.exports = tokens => {
         return parse_handler(reject => {
             if(!is_var())       return; const name = skip_var().value
             if(!is_punc(':'))   return; skip_punc(':')
+            if(!is_op('/'))     return; skip_op('/')
+            if(!is_type())      return; const ret_type = skip_type()
             const location = tokens.save()
 
             const vars = parse_delimited(is_var, () => {
+                const arg_var = tokens.next()
+                const arg_type = skip_type()
                 const location = tokens.save()
-                return { ...tokens.next(), location }
+                return { ...arg_var, location, arg_type: arg_type }
             }, ',')
 
             INSIDE_FUNCTION = true
@@ -200,7 +209,8 @@ module.exports = tokens => {
                 vars: vars,
                 name: name,
                 body: body,
-                location: location
+                location: location,
+                ret_type: ret_type
             }
         })
     }

@@ -31,7 +31,7 @@
 		"keywords": {
 			"patterns": [{
 				"name": "keyword.control.ku",
-				"match": "\\b(if|else|while|for|ret|typeof|continue|break)\\b"
+				"match": "(\\bif|\\belse|\\bwhile|\\bfor|\\bret|\\btypeof|\\bbreak|\\bcontinue|\\bnum|\\bstr|\\bbol|\/num|\/str|\/bol)\\b"
 			}]
 		},
         "numbers": {

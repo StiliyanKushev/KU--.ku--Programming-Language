@@ -1,0 +1,4 @@
+@outln @bol2str false
+@outln @num2str 123
+@outln @num2str @str2num "456"
+@outln @bol2str @str2bol "true"

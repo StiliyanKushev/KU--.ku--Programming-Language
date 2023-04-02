@@ -1,5 +1,5 @@
 module.exports = reader => {
-    var keywords = ' if else for while true false ret break continue typeof '
+    var keywords = ' if else for while true false ret break continue typeof num str bol '
 
     // navigation functions
     const next = () => read_next()
