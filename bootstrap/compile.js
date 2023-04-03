@@ -99,7 +99,7 @@ module.exports.generate_asm = ast => {
     }
 
     const throw_fatal_error = (error, node, parent) => {
-        exit_error(`error: ${error}\nat: row: ${node?.location?.line} col: ${node?.location?.col}`)
+        exit_error(`\nerror: ${error}\nat: row: ${node?.location?.line} col: ${node?.location?.col}`)
     }
 
     const throw_variable_not_exist = (node, parent) => {
@@ -177,6 +177,11 @@ module.exports.generate_asm = ast => {
     const throw_unsupported_operation = (node, parent) => {
         throw_fatal_error(
             `binary operation not supported`, node, parent)
+    }
+
+    const throw_not_implemented = (node, parent) => {
+        throw_fatal_error(
+            `not implemented -> ${node.type}`, node, parent)
     }
 
     const lookup_variable = (node, parent, name, ebp_offset = 0) => {
@@ -263,14 +268,16 @@ module.exports.generate_asm = ast => {
                 }
             }
         } else if(node.type == 'call') {
-            // check_value_type(read_call_function(node, parent))
+            throw_not_implemented(node, parent)
         } else if(node.type == 'signed') {
             const com_value = read_signed(node, parent)
             return com_value
         } else if(node.type == 'postfix') {
-            // check_value_type(read_postfix(node, parent))
+            const com_value = read_postfix(node, parent)
+            return com_value
         } else if(node.type == 'prefix') {
-            // check_value_type(read_prefix(node, parent))
+            const com_value = read_prefix(node, parent)
+            return com_value
         } else {
             throw_unknown_node_type(node, parent)
         }
@@ -288,7 +295,6 @@ module.exports.generate_asm = ast => {
             type: 'num',
             write_all: () => {
                 write_code(`;; signed num`)
-                console.log(node)
                 if(node.op.value == '-') {
                     write_code(`neg eax`)
                 }
@@ -534,6 +540,7 @@ module.exports.generate_asm = ast => {
             const name = found_var.value.name
             const type = found_var.value.type
             const new_value = read_value(node.value, parent, type)
+
             write_code(`;; --- assign "${name}" [${type}] (${offset}) --- ;;`)
             new_value.write_all()
             write_code(`mov [ebp-${offset}], eax`)
@@ -553,11 +560,67 @@ module.exports.generate_asm = ast => {
     }
 
     const read_postfix = (node, parent) => {
-        // todo: implement
+        const found_var = lookup_variable(node, parent, node.name)
+        const type = found_var.value.type
+        const name = found_var.value.name
+        const offset = found_var.ebp_offset
+
+        if(type !== 'num') {
+            throw_prefix_non_numeric(node, parent)
+        }
+
+        return {
+            type: 'num',
+            write_all: () => {
+                const op = node.op.value
+                write_code(`;; --- postfix ${op} "${name}" [${type}] (${offset}) --- ;;`)
+                write_code(`mov eax, [ebp-${offset}]`)
+                if(op == '++') {
+                    write_code(`inc eax`)
+                    
+                } else if(op == '--') {
+                    write_code(`dec eax`)
+                }
+                write_code(`mov [ebp-${offset}], eax`)
+                write_code(`mov [ebp-${offset}], eax`)
+                write_code(`mov eax, [ebp-${offset}]`)
+                if(op == '++') {
+                    write_code(`dec eax`)
+                    
+                } else if(op == '--') {
+                    write_code(`inc eax`)
+                }
+            }
+        }
     }
 
     const read_prefix = (node, parent) => {
-        // todo: implement
+        const found_var = lookup_variable(node, parent, node.name)
+        const type = found_var.value.type
+        const name = found_var.value.name
+        const offset = found_var.ebp_offset
+
+        if(type !== 'num') {
+            throw_prefix_non_numeric(node, parent)
+        }
+
+        return {
+            type: 'num',
+            write_all: () => {
+                const op = node.op.value
+                write_code(`;; --- prefix ${op} "${name}" [${type}] (${offset}) --- ;;`)
+                write_code(`mov eax, [ebp-${offset}]`)
+                if(op == '++') {
+                    write_code(`inc eax`)
+                    
+                } else if(op == '--') {
+                    write_code(`dec eax`)
+                }
+                write_code(`mov [ebp-${offset}], eax`)
+                write_code(`mov [ebp-${offset}], eax`)
+                write_code(`mov eax, [ebp-${offset}]`)
+            }
+        }
     }
 
     const read_ret = (node, parent) => {

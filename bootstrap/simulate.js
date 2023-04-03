@@ -170,7 +170,7 @@ module.exports.simulate_ast = ast => {
     console.log('-'.repeat(process.stdout.columns))
 
     const throw_fatal_error = (error, node, parent) => {
-        exit_error(`error: ${error}\nat: row: ${node?.location?.line} col: ${node?.location?.col}`)
+        exit_error(`\nerror: ${error}\nat: row: ${node?.location?.line} col: ${node?.location?.col}`)
     }
 
     const throw_variable_not_exist = (node, parent) => {

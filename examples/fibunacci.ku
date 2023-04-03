@@ -1,13 +1,18 @@
 # :a/num = -69 + 420
 # :b/num = 420 / 2
-# :c/bol = false || false || false || true
+# :c/bol = false
 # :d/str = "Hello World!"
 
-:a/num = -2
-:b/num = 4
-:c/num = a + b
+# :a/num = -2
+# :b/num = 4
+# :c/num = a + b
 
 # @outln @num2str c
 
 # :a/num = 1
 # a = 2
+
+:a/num = 1
+:b/num = ++a + a++ + a
+
+# @outln @num2str b
