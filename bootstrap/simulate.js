@@ -240,6 +240,11 @@ module.exports.simulate_ast = ast => {
         )
     }
 
+    const throw_binary_op_different_types = (node, parent) => {
+        throw_fatal_error(
+            `binary operation on different types`, node, parent)
+    }
+
     const type_default_value = (value_type) => {
         if(value_type == 'number') return 0
         if(value_type == 'boolean') return false
@@ -319,7 +324,7 @@ module.exports.simulate_ast = ast => {
             return check_value_type(node.value)
         } else if(node.type == 'str') {
             return check_value_type(node.value)
-        } else if(node.type == 'bool') {
+        } else if(node.type == 'bol') {
             return check_value_type(node.value)
         } else if(node.type == 'binary') {
             return check_value_type(read_binary(node, parent))
@@ -350,7 +355,7 @@ module.exports.simulate_ast = ast => {
         if(typeof value !== 'number') {
             throw_signed_non_numeric(node, parent)
         }
-        return node.operator == '+' ? value : -value
+        return node.op.value == '+' ? value : -value
     }
 
     const read_binary = (node, parent) => {
@@ -359,8 +364,7 @@ module.exports.simulate_ast = ast => {
 
         // todo: maybe the language should support that?
         if(typeof left !== typeof right) {
-            throw_fatal_error(
-                `binary operation on different types`, node, parent)
+            throw_binary_op_different_types(node, parent)
         }
 
         if(node.operator == '+') {

@@ -2,10 +2,6 @@
 :b/str = "hello"
 :c/bol = true
 
-func:/num a num, b num {
-    ret a + b
-} 
-
 # @out a
 # @out b
 # @out c

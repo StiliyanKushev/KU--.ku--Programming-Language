@@ -12,7 +12,7 @@ module.exports = tokens => {
     let INSIDE_LOOP     = false
 
     // token validating functions
-    const is_bool_expr = expr => expr.type == 'bool' || (expr.type == 'binary' && is_bool_op(expr.operator))
+    const is_bool_expr = expr => expr.type == 'bol' || (expr.type == 'binary' && is_bool_op(expr.operator))
     const is_bool_op   = op => ' && || == > < <= >= != '.indexOf(' ' + op + ' ') >= 0 
     const is_val       = cc => ' num str var '.indexOf(' ' + cc.type + ' ') >= 0
     const is_var       = () => { let tok = tokens.peek(); return tok && tok.type == 'var' }
@@ -68,7 +68,7 @@ module.exports = tokens => {
             if(is_val(current)) return { location, ...current }
             if(current.value == 'true' || current.value == 'false') {
                 return { 
-                    type: 'bool', 
+                    type: 'bol', 
                     value: current.value == 'true', 
                     location: location 
                 }
@@ -165,7 +165,7 @@ module.exports = tokens => {
 
             const op = tokens.peek().value
 
-            if(left.type == 'bool' && !is_bool_op(op)) unexpected()
+            if(left.type == 'bol' && !is_bool_op(op)) unexpected()
 
             // do this if the current prec is bigger
             if(PRECEDENCE[op] > prev_prec) return parse_binary({

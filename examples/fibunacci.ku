@@ -1,10 +1,13 @@
-:target = 10
+# :a/num = -69 + 420
+# :b/num = 420 / 2
+# :c/bol = false || false || false || true
+# :d/str = "Hello World!"
 
-:a = 1 :b = 1
+:a/num = -2
+:b/num = 4
+:c/num = a + b
 
-while b < target {
-    @out b
-    :c = b
-    b = b + a
-    a = c
-}
+# @outln @num2str c
+
+# :a/num = 1
+# a = 2
