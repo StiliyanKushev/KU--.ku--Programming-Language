@@ -289,15 +289,20 @@ module.exports.generate_asm = ast => {
                 }
             }
         } else if(node.type == 'call') {
-            throw_not_implemented(node, parent)
+            const com_value = read_call_function(node, parent)
+            check_value_type(com_value.type)
+            return com_value
         } else if(node.type == 'signed') {
             const com_value = read_signed(node, parent)
+            check_value_type(com_value.type)
             return com_value
         } else if(node.type == 'postfix') {
             const com_value = read_postfix(node, parent)
+            check_value_type(com_value.type)
             return com_value
         } else if(node.type == 'prefix') {
             const com_value = read_prefix(node, parent)
+            check_value_type(com_value.type)
             return com_value
         } else {
             throw_unknown_node_type(node, parent)
