@@ -12,7 +12,15 @@
 # :a/num = 1
 # a = 2
 
-:a/num = 1
-:b/num = ++a + a++ + a
+# :a/num = 1
+# :b/num = ++a + a++ + a
 
 # @outln @num2str b
+
+
+sum:/num a num, b num {
+    # ret a + b
+    :c/num = a + b
+}
+
+@sum 1, 1

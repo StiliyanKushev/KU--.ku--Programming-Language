@@ -198,13 +198,34 @@ module.exports.generate_asm = ast => {
         // plus 2 where 1 is for the ip pushed by "call" and 1 for
         // the push of 'ebp' in each function context
         return lookup_variable(
-            node, parent.parent, ebp_offset - 2 - parent.parent?.var_offset)
+            node, parent.parent, name, ebp_offset - 2 - parent.parent?.var_offset)
+    }
+
+    const lookup_function = (node, parent, name) => {
+        if(!parent) throw_function_not_exist(node, parent)
+        if(parent.context.functions.has(name)) {
+            const value = parent.context.functions.get(name)
+            return {
+                parent: parent,
+                value: value,
+            }
+        }
+
+        return lookup_function(
+            node, parent.parent, name)
     }
 
     const read_value = (node, parent, opt_value_type) => {
         if(!node) {
             return {
                 write_all: () => write_code(`mov eax, 0`)
+            }
+        }
+
+        // we pass a custom write_all and type
+        if(node.type == 'override') {
+            return {
+                ...node.override
             }
         }
 
@@ -284,7 +305,102 @@ module.exports.generate_asm = ast => {
     }
 
     const read_func = (node, parent) => {
-        // todo: implement
+        const label_start_func  = create_label()
+        const label_end_func    = create_label()
+        const label_ret_func    = create_label()
+
+        let name       = node.name
+        let ret_type   = node.ret_type.value
+        let ret_size   = types_offsets[ret_type]
+        let args       = node.vars
+
+        parent.context.functions.set(name, {
+            name, ret_type, ret_size, args,
+            label_start_func,
+            label_end_func,
+            label_ret_func
+        })
+
+        const world = {
+            parent: parent,
+            context: create_context()
+        }
+
+        return {
+            name, ret_size, ret_type, args,
+            label_start_func,
+            label_end_func,
+            label_ret_func,
+            write_all: () => {
+                // initially we always jump over the function
+                // we only want to go in if it's called
+                write_code(`jmp ${label_end_func}`)
+                write_code(`${label_start_func}:`)
+                write_code(`push ebp`)
+                write_code(`mov ebp, esp`)
+
+                write_code(`;; --- function declare "${name}" [${ret_type}] --- ;;`)
+                node.vars.forEach((arg_var, i) => {
+                    const arg_var_declare = {
+                        type: 'var',
+                        mode: 'declare',
+                        name: arg_var.value,
+                        value: {
+                            type: 'override',
+                            override: {
+                                write_all: () => {
+                                    // to get the value we need to skip
+                                    // a few things over.
+                                    // we skip the saved 'ebp'.
+                                    // we skip the pushed by 'call' ip.
+                                    // we skip each previous argument.
+                                    write_code(`mov eax, [ebp + 8 + ${i * 4}]`)
+                                }
+                            }
+                        },
+                        location: arg_var.location,
+                        value_type: arg_var.arg_type
+                    }
+                    read_var(arg_var_declare, world).write_all()
+                })
+
+                read_scope(node.body.prog, world.parent, world.context)
+                
+                write_code(`${label_ret_func}:`)
+                write_code(`mov esp, ebp`)
+                write_code(`pop ebp`)
+                write_code(`ret`)
+                write_code(`${label_end_func}:`)
+            }
+        }
+    }
+
+    const read_call_function = (node, parent) => {
+        const found_func    = lookup_function(node, parent, node.name)
+        const name          = found_func.value.name
+        const ret_type      = found_func.value.ret_type
+        const ret_size      = found_func.value.ret_size
+        const func_args     = found_func.value.args
+        const _start_func   = found_func.value.label_start_func
+
+        if(func_args.length > node.args.length) {
+            throw_function_invalid_arguments_count(node, parent)
+        }
+
+        return {
+            type: ret_type,
+            name: name,
+            ret_size: ret_size,
+            write_all: () => {
+                func_args.reverse().map((func_arg, ri) => {
+                    let i = func_args.length - 1 - ri
+                    const com_value = read_value(node.args[i], parent, func_arg.arg_type.value)
+                    com_value.write_all()
+                    write_code(`push eax`)
+                })
+                write_code(`call ${_start_func}`)
+            }
+        }
     }
 
     const read_signed = (node, parent) => {
@@ -524,26 +640,37 @@ module.exports.generate_asm = ast => {
             let type       = node.value_type.value
             let type_size  = types_offsets[type]
             let offset     = parent.context.var_offset += type_size
-            let com_value  = read_value(node.value, parent, type)
-            parent.context.variables.set(node.name, {
-                name, type, type_size, offset
-            })
 
-            write_code(`;; --- declare "${name}" [${type}] (${offset}) --- ;;`)
-            write_code(`sub esp, ${type_size}`)
-            com_value.write_all()
-            write_code(`mov [ebp-${offset}], eax`)
+            return {
+                name, type, type_size, offset,
+                write_all: () => {
+                    let com_value  = read_value(node.value, parent, type)
+                    parent.context.variables.set(node.name, {
+                        name, type, type_size, offset
+                    })
+        
+                    write_code(`;; --- declare "${name}" [${type}] (${offset}) --- ;;`)
+                    write_code(`sub esp, ${type_size}`)
+                    com_value.write_all()
+                    write_code(`mov [ebp-${offset}], eax`)
+                }
+            }
         }
         else if(node.mode == 'assign') {
             const found_var = lookup_variable(node, parent, node.name)
             const offset = found_var.ebp_offset
             const name = found_var.value.name
             const type = found_var.value.type
-            const new_value = read_value(node.value, parent, type)
 
-            write_code(`;; --- assign "${name}" [${type}] (${offset}) --- ;;`)
-            new_value.write_all()
-            write_code(`mov [ebp-${offset}], eax`)
+            return {
+                name, type, offset,
+                write_all: () => {
+                    const new_value = read_value(node.value, parent, type)
+                    write_code(`;; --- assign "${name}" [${type}] (${offset}) --- ;;`)
+                    new_value.write_all()
+                    write_code(`mov [ebp-${offset}], eax`)
+                }
+            }
         }
     }
 
@@ -582,8 +709,6 @@ module.exports.generate_asm = ast => {
                     write_code(`dec eax`)
                 }
                 write_code(`mov [ebp-${offset}], eax`)
-                write_code(`mov [ebp-${offset}], eax`)
-                write_code(`mov eax, [ebp-${offset}]`)
                 if(op == '++') {
                     write_code(`dec eax`)
                     
@@ -643,30 +768,37 @@ module.exports.generate_asm = ast => {
 
         for(let node of prog) {
             if(node.type == 'func') {
-                read_func(node, world)
+                read_func(node, world).write_all()
             } else if(node.type == 'var') {
-                read_var(node, world)
+                read_var(node, world).write_all()
             } else if(node.type == 'call') {
-                read_call_function(node, world)
+                read_call_function(node, world).write_all()
             } else if(node.type == 'if') {
-                read_if(node, world)
+                // read_if(node, world)
+                throw_not_implemented(node, world)
             } else if(node.type == 'for') {
-                read_for(node, world)
+                // read_for(node, world)
+                throw_not_implemented(node, world)
             } else if(node.type == 'while') {
-                read_while(node, world)
+                // read_while(node, world)
+                throw_not_implemented(node, world)
             } else if(node.type == 'postfix') {
-                read_postfix(node, world)
+                read_postfix(node, world).write_all()
             } else if(node.type == 'prefix') {
-                read_prefix(node, world)
+                read_prefix(node, world).write_all()
             } else if(node.type == 'ret') {
-                return read_ret(node, world)
+                // return read_ret(node, world)
+                throw_not_implemented(node, world)
             } else if(node.type == 'kw' && node.value == 'break') {
-                return read_break(node, world)
+                // return read_break(node, world)
+                throw_not_implemented(node, world)
             } else if(node.type == 'kw' && node.value == 'continue') {
-                return read_continue(node, world)
+                // return read_continue(node, world)
+                throw_not_implemented(node, world)
             } else if(node.type == 'internal') {
                 // only for core functionality
-                exec_internal(node, world)
+                // exec_internal(node, world)
+                throw_not_implemented(node, world)
             } else {
                 throw_unknown_node_type(node, world)
             }
