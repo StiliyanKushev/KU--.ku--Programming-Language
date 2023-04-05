@@ -302,12 +302,29 @@ module.exports.simulate_ast = ast => {
             const arg_var_declare = {
                 type: 'var',
                 mode: 'declare',
-                name: arg_var.value,
+
+                // important not to set the name of the var
+                // right away because it may be the same as 
+                // a variable name from above, but because we
+                // declare the args one by one, an error might occur
+                // if the next argument is a binary operation on the 
+                // variable from the above context with the same name
+                // as the previous argument
+                name: ' '.repeat(i + 1),
+                
                 value: node.args[i],
                 location: arg_var.location,
                 value_type: arg_var.arg_type
             }
             read_var(arg_var_declare, world)
+        })
+
+        // now we restore the correct variable names
+        // mentioned above, before we continue reading the scope.
+        func.vars.forEach((arg_var, i) => {
+            world.context.variables.set(
+                arg_var.value, world.context.variables.get(' '.repeat(i + 1)))
+            world.context.variables.delete(' '.repeat(i + 1))
         })
 
         return read_scope(func.body.prog, parent, world.context)

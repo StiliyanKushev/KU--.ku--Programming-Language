@@ -225,8 +225,6 @@ module.exports.generate_asm = ast => {
     }
 
     const lookup_variable = (node, parent, name, ebp_offset = 0) => {
-        // console.log('lookup_variable', ebp_offset, name, parent.parent?.context.max_var_offset)
-        
         if(!parent) throw_variable_not_exist(node, parent)
         if(parent.context.variables.has(name)) {
             const value = parent.context.variables.get(name)
@@ -464,12 +462,6 @@ module.exports.generate_asm = ast => {
                     // we push an arg, so we increase var offset
                     parent.context.var_offset += 4
                 })
-
-                // // offset_before_call as first argument always
-                // parent.context.var_offset += 4
-                // write_code(`mov eax, ${parent.context.var_offset}`)
-                // write_code(`push eax`)
-
                 write_code(`call ${_start_func}`)
             }
         }
