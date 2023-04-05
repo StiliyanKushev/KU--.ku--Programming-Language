@@ -552,7 +552,12 @@ module.exports.simulate_ast = ast => {
     }
 
     const read_ret = (node, parent) => {
-        return read_value(node.value, parent, read_type(parent.context.flags.get('ret_type')))
+        const ret_type = read_type(parent.context.flags.get('ret_type'))
+        if(node.value) {
+            return read_value(node.value, parent, ret_type)
+        } else {
+            return type_default_value(ret_type)
+        }
     }
 
     const read_break = (node, parent) => {

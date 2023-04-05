@@ -200,9 +200,10 @@ module.exports = tokens => {
                 return { ...arg_var, location, arg_type: arg_type }
             }, ',')
 
-            INSIDE_FUNCTION = true
+            let ALREADY_INSIDE_FUNCTION = INSIDE_FUNCTION
+            if(!ALREADY_INSIDE_FUNCTION) INSIDE_FUNCTION = true
             const body = parse_body()
-            INSIDE_FUNCTION = false
+            if(!ALREADY_INSIDE_FUNCTION) INSIDE_FUNCTION = false
 
             return {
                 type: 'func',
@@ -312,9 +313,10 @@ module.exports = tokens => {
                 unexpected()
             }
 
-            INSIDE_LOOP = true
+            let ALREADY_INSIDE_LOOP = INSIDE_LOOP
+            if(!ALREADY_INSIDE_LOOP) INSIDE_LOOP = true
             const body = parse_body()
-            INSIDE_LOOP = false
+            if(!ALREADY_INSIDE_LOOP) INSIDE_LOOP = false
 
             return {
                 type        : 'while',
