@@ -49,31 +49,20 @@ ${asm_data}
 ${asm_text}
 \t;; --- end of program (exit 0) --- ;;
 \tmov esp, ebp
-\tpush ebp
+\tpop ebp
 \tmov eax, 1
 \tmov ebx, 0
 \tint 0x80
 `
 
-let can_write = true
-let stored_label_inc = 0
-const disable_writes = () => {
-    stored_label_inc = _label_inc
-    can_write = false
-}
-const enable_writes = () => {
-    _label_inc = stored_label_inc
-    can_write = true
-}
-
 // append text to the .text section
 const write_code = text => {
-    if(can_write) asm_text += '\t' + text + '\n'
+    asm_text += '\t' + text + '\n'
 }
 
 // append text to the .data section
 const write_data = text => {
-    if(can_write) asm_data += '\t' + text + '\n'
+    asm_data += '\t' + text + '\n'
 }
 
 // offsets on the stack in bytes
@@ -91,27 +80,8 @@ const create_context = (opt_extra = {}) => ({
     variables: new Map(), // map variable name to offset of ebp for parent's scope
     functions: new Map(), // map function name to function label
     var_offset: 0,        // incremented offset for each new local variable on stack
-    max_var_offset: 0,    // precomputed maximum locally var offset. Used to calculate lookup var offsets.
 })
 
-// simple way to copy an existing context
-// only really ever useful when calculating max_var_offset
-// onto a dummy world that looks the exact same way
-const copy_context = (src_context) => {
-    let dest = {}
-    Object.entries(src_context).forEach(([key, value]) => {
-        if(value instanceof Map) {
-            dest[key] = new Map(value)
-        } else if(value instanceof Set) {
-            dest[key] = new Set(value)
-        } else if(typeof value == 'object'){
-            dest[key] = {...value}
-        } else {
-            dest[key] = value
-        }
-    })
-    return dest
-}
 
 // simple function to create a unique label name
 let _label_inc = 0, create_label = () => '__' + (++_label_inc).toFixed(10).replace('.', '_')
@@ -224,24 +194,23 @@ module.exports.generate_asm = ast => {
         if(value_type == 'str') return 0
     }
 
-    const lookup_variable = (node, parent, name, ebp_offset = 0) => {
+    const lookup_variable = (node, parent, name, lookup_index = 0) => {
         if(!parent) throw_variable_not_exist(node, parent)
         if(parent.context.variables.has(name)) {
             const value = parent.context.variables.get(name)
             return {
                 parent: parent,
                 value: value,
-                ebp_offset: ebp_offset + value.offset
+                ebp_offset: value.offset,
+                lookup_index: lookup_index
             }
         }
 
-        // plus 8 where 4 is for the ip pushed by "call" and 4 for
-        // the push of 'ebp' in each function context
         return lookup_variable(
             node, 
             parent.parent, 
             name, 
-            ebp_offset - 8 - (parent.parent?.context.max_var_offset || 0))
+            lookup_index + 1)
     }
 
     const lookup_function = (node, parent, name) => {
@@ -323,18 +292,18 @@ module.exports.generate_asm = ast => {
         } else if(node.type == 'var') {
             const found_var     = lookup_variable(node, parent, node.value)
             const var_name      = found_var.value.name
-            const var_is_local  = parent.context.variables.has(var_name)
             check_value_type(found_var.value.type)
             return {
                 type: found_var.value.type,
                 name: var_name,
                 write_all: () => {
                     write_code(`;; var val ${var_name}`)
-                    if(var_is_local) {
-                        write_code(`mov eax, [ebp - ${found_var.ebp_offset}]`)
-                    } else {
-                        write_code(`mov eax, [ebp - ${found_var.ebp_offset}]`)
+                    write_code(`push ebp`)
+                    for(let i = 0; i < found_var.lookup_index; i++) {
+                        write_code(`mov ebp, [ebp]`)
                     }
+                    write_code(`mov eax, [ebp - ${found_var.ebp_offset}]`)
+                    write_code(`pop ebp`)
                 }
             }
         } else if(node.type == 'call') {
@@ -758,7 +727,14 @@ module.exports.generate_asm = ast => {
                     const new_value = read_value(node.value, parent, type)
                     write_code(`;; --- assign "${name}" [${type}] (${offset}) --- ;;`)
                     new_value.write_all()
+
+                    write_code(`push ebp`)
+                    for(let i = 0; i < found_var.lookup_index; i++) {
+                        write_code(`mov ebp, [ebp]`)
+                    }
                     write_code(`mov [ebp-${offset}], eax`)
+                    write_code(`pop ebp`)
+
                 }
             }
         }
@@ -850,67 +826,42 @@ module.exports.generate_asm = ast => {
             context: opt_context || create_context()
         }
 
-        const read_body_scope = given_world => {
-            for(let node of prog) {
-                if(node.type == 'func') {
-                    read_func(node, given_world).write_all()
-                } else if(node.type == 'var') {
-                    read_var(node, given_world).write_all()
-                } else if(node.type == 'call') {
-                    read_call_function(node, given_world).write_all()
-                } else if(node.type == 'if') {
-                    // read_if(node, given_world)
-                    throw_not_implemented(node, given_world)
-                } else if(node.type == 'for') {
-                    // read_for(node, given_world)
-                    throw_not_implemented(node, given_world)
-                } else if(node.type == 'while') {
-                    // read_while(node, given_world)
-                    throw_not_implemented(node, given_world)
-                } else if(node.type == 'postfix') {
-                    read_postfix(node, given_world).write_all()
-                } else if(node.type == 'prefix') {
-                    read_prefix(node, given_world).write_all()
-                } else if(node.type == 'ret') {
-                    return read_ret(node, given_world).write_all()
-                } else if(node.type == 'kw' && node.value == 'break') {
-                    // return read_break(node, given_world)
-                    throw_not_implemented(node, given_world)
-                } else if(node.type == 'kw' && node.value == 'continue') {
-                    // return read_continue(node, given_world)
-                    throw_not_implemented(node, given_world)
-                } else if(node.type == 'internal') {
-                    // only for core functionality
-                    // exec_internal(node, given_world)
-                    throw_not_implemented(node, given_world)
-                } else {
-                    throw_unknown_node_type(node, given_world)
-                }
+        for(let node of prog) {
+            if(node.type == 'func') {
+                read_func(node, world).write_all()
+            } else if(node.type == 'var') {
+                read_var(node, world).write_all()
+            } else if(node.type == 'call') {
+                read_call_function(node, world).write_all()
+            } else if(node.type == 'if') {
+                // read_if(node, world)
+                throw_not_implemented(node, world)
+            } else if(node.type == 'for') {
+                // read_for(node, world)
+                throw_not_implemented(node, world)
+            } else if(node.type == 'while') {
+                // read_while(node, world)
+                throw_not_implemented(node, world)
+            } else if(node.type == 'postfix') {
+                read_postfix(node, world).write_all()
+            } else if(node.type == 'prefix') {
+                read_prefix(node, world).write_all()
+            } else if(node.type == 'ret') {
+                return read_ret(node, world).write_all()
+            } else if(node.type == 'kw' && node.value == 'break') {
+                // return read_break(node, world)
+                throw_not_implemented(node, world)
+            } else if(node.type == 'kw' && node.value == 'continue') {
+                // return read_continue(node, world)
+                throw_not_implemented(node, world)
+            } else if(node.type == 'internal') {
+                // only for core functionality
+                // exec_internal(node, world)
+                throw_not_implemented(node, world)
+            } else {
+                throw_unknown_node_type(node, world)
             }
         }
-
-        // precompute max_var_offset here so that
-        // later lookup_functions inside nested function calls
-        // can find the exact location of the variable.
-        world.context.max_var_offset = 0
-
-        // to precompute we will "dummy" read the whole
-        // scope's body, disabling the writing functions
-        // and just taking a note of the final var_offset.
-        const was_able_to_write = can_write
-        if(was_able_to_write) disable_writes()
-        const dummy_world = {
-            parent: opt_parent,
-            context: copy_context(world.context)
-        }
-        read_body_scope(dummy_world)
-        world.context.max_var_offset = dummy_world.context.var_offset
-        if(was_able_to_write) enable_writes()
-
-        // now that we have precomputed the max_var_offset
-        // we can proceed with reading the body and writing
-        // to the asm text string with the correct offsets inside.
-        read_body_scope(world)
     }
 
     read_scope(ast.prog, core_com)
