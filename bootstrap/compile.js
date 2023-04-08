@@ -464,11 +464,11 @@ module.exports.generate_asm = ast => {
 
     const read_signed = (node, parent) => {
         // todo: support signed decimals
-        const com_value = read_value(node.value, parent, 'num')
-        com_value.write_all()
         return {
             type: 'num',
             write_all: () => {
+                const com_value = read_value(node.value, parent, 'num')
+                com_value.write_all()
                 write_code(`;; signed num`)
                 if(node.op.value == '-') {
                     write_code(`neg eax`)
@@ -756,7 +756,8 @@ module.exports.generate_asm = ast => {
         const found_var = lookup_variable(node, parent, node.name)
         const type = found_var.value.type
         const name = found_var.value.name
-        const offset = found_var.ebp_offset
+        const ebp_offset = found_var.ebp_offset
+        const lookup_index = found_var.lookup_index
 
         if(type !== 'num') {
             throw_prefix_non_numeric(node, parent)
@@ -766,21 +767,29 @@ module.exports.generate_asm = ast => {
             type: 'num',
             write_all: () => {
                 const op = node.op.value
-                write_code(`;; --- postfix ${op} "${name}" [${type}] (${offset}) --- ;;`)
-                write_code(`mov eax, [ebp-${offset}]`)
+                write_code(`;; --- postfix ${op} "${name}" [${type}] (${ebp_offset}) --- ;;`)
+                
+                write_code(`push ebp`)
+                for(let i = 0; i < lookup_index; i++) {
+                    write_code(`mov ebp, [ebp]`)
+                }
+
+                write_code(`mov eax, [ebp-${ebp_offset}]`)
                 if(op == '++') {
                     write_code(`inc eax`)
                     
                 } else if(op == '--') {
                     write_code(`dec eax`)
                 }
-                write_code(`mov [ebp-${offset}], eax`)
+                write_code(`mov [ebp-${ebp_offset}], eax`)
                 if(op == '++') {
                     write_code(`dec eax`)
                     
                 } else if(op == '--') {
                     write_code(`inc eax`)
                 }
+
+                write_code(`pop ebp`)
             }
         }
     }
@@ -789,7 +798,8 @@ module.exports.generate_asm = ast => {
         const found_var = lookup_variable(node, parent, node.name)
         const type = found_var.value.type
         const name = found_var.value.name
-        const offset = found_var.ebp_offset
+        const ebp_offset = found_var.ebp_offset
+        const lookup_index = found_var.lookup_index
 
         if(type !== 'num') {
             throw_prefix_non_numeric(node, parent)
@@ -799,15 +809,20 @@ module.exports.generate_asm = ast => {
             type: 'num',
             write_all: () => {
                 const op = node.op.value
-                write_code(`;; --- prefix ${op} "${name}" [${type}] (${offset}) --- ;;`)
-                write_code(`mov eax, [ebp-${offset}]`)
+                write_code(`;; --- prefix ${op} "${name}" [${type}] (${ebp_offset}) --- ;;`)
+                write_code(`push ebp`)
+                for(let i = 0; i < lookup_index; i++) {
+                    write_code(`mov ebp, [ebp]`)
+                }
+                write_code(`mov eax, [ebp-${ebp_offset}]`)
                 if(op == '++') {
                     write_code(`inc eax`)
                     
                 } else if(op == '--') {
                     write_code(`dec eax`)
                 }
-                write_code(`mov [ebp-${offset}], eax`)
+                write_code(`mov [ebp-${ebp_offset}], eax`)
+                write_code(`pop ebp`)
             }
         }
     }

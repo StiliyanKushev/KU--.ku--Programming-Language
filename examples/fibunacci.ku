@@ -17,41 +17,41 @@
 
 # @outln @num2str b
 
-:d/num = 5
+# :d/num = 5
 
-sum:/num a num, b num {
-    :dd/num = 1
-    inner_sum:/num {
-        :c/num
-        dd = 5
-        inner_inner_sum:/num {
-            c = a + b
-            ret c * (d + dd)
-        }
-        ret @inner_inner_sum
-    }
-    ret @inner_sum
-}
-
-:a/num = 10
-:myvar/num = @sum 1, 1 + ++a
-:test/num = 5
-
-# :variable/num = 5
-
-# sum:/num a num {
-#     :c/num = -1
-#     inner:/num {
-#         c = 0
-#         ret a + variable + c 
+# sum:/num a num, b num {
+#     :dd/num = 1
+#     inner_sum:/num {
+#         :c/num
+#         dd = 5
+#         inner_inner_sum:/num {
+#             c = a + b
+#             ret c * (d + dd)
+#         }
+#         ret @inner_inner_sum
 #     }
-#     ret @inner
+#     ret @inner_sum
 # }
 
-# :result/num = @sum 4
+# :a/num = 10
+# :myvar/num = @sum 1, 1 + ++a
+# :test/num = 5
 
-# :test/num = 123
+:variable/num = 5
 
-# :result2/num = @sum 4
+sum:/num a num {
+    :c/num = -1
+    inner:/num {
+        c = 0
+        ret a + variable++ + c 
+    }
+    ret @inner
+}
 
-# @outln @num2str result
+:result/num = @sum 4
+
+:test/num = 123
+
+:result2/num = @sum 4
+
+# @outln @num2str result2
