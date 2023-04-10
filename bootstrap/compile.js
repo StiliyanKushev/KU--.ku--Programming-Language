@@ -33,22 +33,24 @@ module.exports.compile_asm = (asm, output) => {
 
 // ------------------------------------------------------------------------ //
 
-let asm_text = ''
-let asm_data = ''
+let asm_text = '\n'
+let asm_data = '\n'
+let asm_func = '\n'
 
 const asm_final = () => `
 \tsection .data
 ${asm_data}
-\t
+\t;; --- function defines :begin: --- ;;
+${asm_func}
+\t;; --- function defines :end: --- ;;\n
 \tsection .text
 \tglobal _start
 \t_start:
 \tpush ebp
 \tmov ebp, esp
-\t;; --- start of program --- ;;
-\t
+\n\t;; --- program :begin: --- ;;\n
 ${asm_text}
-\t;; --- end of program (exit 0) --- ;;
+\t;; --- program :end: (exit 0) --- ;;
 \tmov esp, ebp
 \tpop ebp
 \tmov eax, 1
@@ -57,13 +59,18 @@ ${asm_text}
 `
 
 // append text to the .text section
-const write_code = text => {
+let write_code = text => {
     asm_text += '\t' + text + '\n'
 }
 
 // append text to the .data section
-const write_data = text => {
+let write_data = text => {
     asm_data += '\t' + text + '\n'
+}
+
+// append text to the functions section
+let write_in_function = text => {
+    asm_func += '\t' + text + '\n'
 }
 
 // offsets on the stack in bytes
@@ -75,14 +82,11 @@ const types_offsets = {
     'str': 4, // hold address of string
 }
 
-// universal function for preparing context of a scope
-const create_context = (opt_extra = {}) => ({
-    ...opt_extra,
-    variables: new Map(), // map variable name to offset of ebp for parent's scope
-    functions: new Map(), // map function name to function label
-    var_offset: 0,        // incremented offset for each new local variable on stack
-})
-
+// list of types that require their memory address
+// to be freed right before the scope dies.
+const types_should_be_freed = [
+    'str'
+]
 
 // simple function to create a unique label name
 let _label_inc = 0, create_label = () => '__' + (++_label_inc).toFixed(10).replace('.', '_')
@@ -90,6 +94,50 @@ let _label_inc = 0, create_label = () => '__' + (++_label_inc).toFixed(10).repla
 module.exports.generate_asm = ast => {
     console.dir(ast, { depth: null })
     console.log('-'.repeat(process.stdout.columns))
+
+    // general function that will keep track of eax
+    // address and lazily adds it to a cache. the scope
+    // then goes through that cache and frees all entries.
+    // note: this function expects the address to be at eax
+    // note: this function expects the size/length to be at ebx
+    const lazy_free = function() {
+        write_code(`;; -- lazy_free -- ;;`)
+        const addr_offset = this.var_offset += 4
+        const size_offset = this.var_offset += 4
+        write_code(`sub esp, 4`)
+        write_code(`mov [ebp - ${addr_offset}], eax`)
+        write_code(`sub esp, 4`)
+        write_code(`mov [ebp - ${size_offset}], ebx`)
+        this.free_set.add([addr_offset, size_offset])
+    }
+
+    // this function will typically run at the end of a scope.
+    // it will loop the free_set set and "free" each of the stored entries.
+    const free_set_context = (context) => {
+        write_code(`;; -- free_set_context -- ;;`)
+        for(let [ addr_offset, size_offset ] of context.free_set) {
+            write_code(`mov eax, [ebp - ${addr_offset}]`)
+            write_code(`mov ebx, [ebp - ${size_offset}]`)
+            write_code(`mov ecx, ebx`)
+            write_code(`mov ebx, eax`)
+            write_code(`mov eax, 91`)
+            write_code(`mov edx, 0`)
+            write_code(`int 0x80`)
+        }
+    }
+
+    // universal function for preparing context of a scope
+    const create_context = (opt_extra = {}) => {
+        const context = {
+            ...opt_extra,
+            variables: new Map(), // map variable name to offset of ebp for parent's scope
+            functions: new Map(), // map function name to function label
+            var_offset: 0,        // incremented offset for each new local variable on stack
+            free_set: new Set(),  // set contains [addr_offset, size_offset] elements
+        }
+        context.lazy_free = lazy_free.bind(context)
+        return context
+    }
 
     const util_string_to_hex_arr = (string) => {
         let arr = []
@@ -227,6 +275,16 @@ module.exports.generate_asm = ast => {
             node, parent.parent, name)
     }
 
+    const execute_in_above_scope = (func, above_scope_index) => {
+        const is_local = above_scope_index == 0
+        !is_local && write_code(`push ebp`)
+        for(let i = 0; i < above_scope_index; i++) {
+            write_code(`mov ebp, [ebp]`)
+        }
+        func()
+        !is_local && write_code(`pop ebp`)
+    }
+
     const read_value = (node, parent, opt_value_type) => {
         if(!node) {
             return {
@@ -294,12 +352,9 @@ module.exports.generate_asm = ast => {
                 name: var_name,
                 write_all: () => {
                     write_code(`;; var val ${var_name}`)
-                    write_code(`push ebp`)
-                    for(let i = 0; i < found_var.lookup_index; i++) {
-                        write_code(`mov ebp, [ebp]`)
-                    }
-                    write_code(`mov eax, [ebp - ${found_var.ebp_offset}]`)
-                    write_code(`pop ebp`)
+                    execute_in_above_scope(() => {
+                        write_code(`mov eax, [ebp - ${found_var.ebp_offset}]`)
+                    }, found_var.lookup_index)
                 }
             }
         } else if(node.type == 'call') {
@@ -324,22 +379,18 @@ module.exports.generate_asm = ast => {
     }
 
     const read_func = (node, parent) => {
-        const label_start_func  = create_label()
-        const label_end_func    = create_label()
-        const label_ret_func    = create_label()
-        const label_ret_none    = create_label()
-
         let name       = node.name
         let ret_type   = node.ret_type.value
         let ret_size   = types_offsets[ret_type]
         let args       = node.vars
 
+        const label_start_func  = `__${name}__begin` + create_label()
+        const label_ret_func    = `__${name}__ret` + create_label()
+
         let data = {
             name, ret_type, ret_size, args,
             label_start_func,
-            label_end_func,
             label_ret_func,
-            label_ret_none
         }
 
         parent.context.functions.set(name, data)
@@ -354,9 +405,8 @@ module.exports.generate_asm = ast => {
         return {
             ...data,
             write_all: () => {
-                // initially we always jump over the function
-                // we only want to go in if it's called
-                write_code(`jmp ${label_end_func}`)
+                let old_write_code = write_code
+                write_code = write_in_function
                 write_code(`${label_start_func}:`)
                 write_code(`push ebp`)
                 write_code(`mov ebp, esp`)
@@ -386,17 +436,18 @@ module.exports.generate_asm = ast => {
                     read_var(arg_var_declare, world).write_all()
                 })
 
-                read_scope(node.body.prog, world.parent, world.context)
+                if(node.internal_code) {
+                    node.internal_code(world, data)
+                } else {
+                    read_scope(node.body.prog, world.parent, world.context)
+                }
                 
-                write_code(`jmp ${label_ret_none}`)     // by default ret none
-                write_code(`${label_ret_func}:`)        // if read "ret", go here
+                write_code(`xor eax, eax`)
+                write_code(`${label_ret_func}:`)
                 write_code(`mov esp, ebp`)
                 write_code(`pop ebp`)
                 write_code(`ret`)
-                write_code(`${label_ret_none}:`)
-                write_code(`xor eax, eax`)
-                write_code(`jmp ${label_ret_func}`)
-                write_code(`${label_end_func}:`)
+                write_code = old_write_code
             }
         }
     }
@@ -428,6 +479,16 @@ module.exports.generate_asm = ast => {
                     parent.context.var_offset += 4
                 })
                 write_code(`call ${_start_func}`)
+                
+                // clear args from local space now
+                parent.context.var_offset -= 4 * func_args.length
+                write_code(`add esp, 4 * ${func_args.length}`)
+
+                if(types_should_be_freed.includes(ret_type)) {
+                    // value is a pointer to a type that should be freed
+                    // as the memory at the said pointer is mapped to the heap.
+                    parent.context.lazy_free()
+                }
             }
         }
     }
@@ -474,12 +535,26 @@ module.exports.generate_asm = ast => {
     }
 
     const read_binary = (node, parent) => {
+        const left = read_value(node.left, parent)
+        const right = read_value(node.right, parent)
+    
+        // todo: maybe the language should support that?
+        if(left.type !== right.type) {
+            throw_binary_op_different_types(node, parent)
+        }
+
         // we predefine the type based on the operator
         let type        // holds the final type
         let req_type    // holds possible required types on both ends
         if(node.operator == '+') {
-            type = 'num'
-            req_type = ['num']
+            if(left.type == 'str') {
+                // string concatination
+                type = 'str'
+                req_type = ['str']
+            } else {
+                type = 'num'
+                req_type = ['num']
+            }
         } else if(node.operator == '-') {
             type = 'num'
             req_type = ['num']
@@ -521,14 +596,6 @@ module.exports.generate_asm = ast => {
         const write_all = () => {
             write_code(`;; --- read binary --- ;;`)
             write_code(`push ebx`)
-    
-            const left = read_value(node.left, parent)
-            const right = read_value(node.right, parent)
-    
-            // todo: maybe the language should support that?
-            if(left.type !== right.type) {
-                throw_binary_op_different_types(node, parent)
-            }
 
             // ex: false > false
             if(!req_type.includes(left.type)) {
@@ -724,13 +791,9 @@ module.exports.generate_asm = ast => {
                     write_code(`;; --- assign "${name}" [${type}] (${offset}) --- ;;`)
                     new_value.write_all()
 
-                    write_code(`push ebp`)
-                    for(let i = 0; i < found_var.lookup_index; i++) {
-                        write_code(`mov ebp, [ebp]`)
-                    }
-                    write_code(`mov [ebp-${offset}], eax`)
-                    write_code(`pop ebp`)
-
+                    execute_in_above_scope(() => {
+                        write_code(`mov [ebp-${offset}], eax`)
+                    }, found_var.lookup_index)
                 }
             }
         }
@@ -764,28 +827,22 @@ module.exports.generate_asm = ast => {
             write_all: () => {
                 const op = node.op.value
                 write_code(`;; --- postfix ${op} "${name}" [${type}] (${ebp_offset}) --- ;;`)
-                
-                write_code(`push ebp`)
-                for(let i = 0; i < lookup_index; i++) {
-                    write_code(`mov ebp, [ebp]`)
-                }
-
-                write_code(`mov eax, [ebp-${ebp_offset}]`)
-                if(op == '++') {
-                    write_code(`inc eax`)
-                    
-                } else if(op == '--') {
-                    write_code(`dec eax`)
-                }
-                write_code(`mov [ebp-${ebp_offset}], eax`)
-                if(op == '++') {
-                    write_code(`dec eax`)
-                    
-                } else if(op == '--') {
-                    write_code(`inc eax`)
-                }
-
-                write_code(`pop ebp`)
+                execute_in_above_scope(() => {
+                    write_code(`mov eax, [ebp-${ebp_offset}]`)
+                    if(op == '++') {
+                        write_code(`inc eax`)
+                        
+                    } else if(op == '--') {
+                        write_code(`dec eax`)
+                    }
+                    write_code(`mov [ebp-${ebp_offset}], eax`)
+                    if(op == '++') {
+                        write_code(`dec eax`)
+                        
+                    } else if(op == '--') {
+                        write_code(`inc eax`)
+                    }
+                }, lookup_index)
             }
         }
     }
@@ -806,19 +863,16 @@ module.exports.generate_asm = ast => {
             write_all: () => {
                 const op = node.op.value
                 write_code(`;; --- prefix ${op} "${name}" [${type}] (${ebp_offset}) --- ;;`)
-                write_code(`push ebp`)
-                for(let i = 0; i < lookup_index; i++) {
-                    write_code(`mov ebp, [ebp]`)
-                }
-                write_code(`mov eax, [ebp-${ebp_offset}]`)
-                if(op == '++') {
-                    write_code(`inc eax`)
-                    
-                } else if(op == '--') {
-                    write_code(`dec eax`)
-                }
-                write_code(`mov [ebp-${ebp_offset}], eax`)
-                write_code(`pop ebp`)
+                execute_in_above_scope(() => {
+                    write_code(`mov eax, [ebp-${ebp_offset}]`)
+                    if(op == '++') {
+                        write_code(`inc eax`)
+                        
+                    } else if(op == '--') {
+                        write_code(`dec eax`)
+                    }
+                    write_code(`mov [ebp-${ebp_offset}], eax`)
+                }, lookup_index)
             }
         }
     }
@@ -869,6 +923,9 @@ module.exports.generate_asm = ast => {
                 throw_unknown_node_type(node, world)
             }
         }
+
+        // scope will die now. free any mapped data from it.
+        free_set_context(world.context)
     }
 
     // define all core functions/constants
@@ -888,8 +945,6 @@ module.exports.generate_asm = ast => {
             this.context.functions.set("num2str", this.num2str)
             this.context.functions.set("str2num", this.str2num)
             this.context.functions.set("str2bol", this.str2bol)
-        
-            write_code('\n\t;; ---------- PROGRAM BEGIN ---------- ;;\n')
         }
     
         make_arg(name, type) {
@@ -909,74 +964,14 @@ module.exports.generate_asm = ast => {
         }
     
         make_func({ name, args, write_internal, ret_type }) {
-            const ret_size = types_offsets[ret_type]
-            const label_start_func = create_label()
-            const label_end_func = create_label()
-            const label_ret_func = create_label()
-            const label_ret_none = create_label()
-    
-            let data = {
-                name, ret_type, ret_size, args,
-                label_start_func,
-                label_end_func,
-                label_ret_func,
-                label_ret_none
-            }
-    
-            this.context.functions.set(name, data)
-
-            const world = {
-                parent: this,
-                context: create_context({
-                    func_self: data
-                }),
-            }
-    
-            // initially we always jump over the function
-            // we only want to go in if it's called
-            write_code(`jmp ${label_end_func}`)
-            write_code(`${label_start_func}:`)
-            write_code(`push ebp`)
-            write_code(`mov ebp, esp`)
-    
-            write_code(`;; --- core: function declare "${name}" [${ret_type}] --- ;;`)
-            args.forEach((arg_var, i) => {
-                const arg_var_declare = {
-                    type: 'var',
-                    mode: 'declare',
-                    name: arg_var.value,
-                    value: {
-                        type: 'override',
-                        override: {
-                            write_all: () => {
-                                // to get the value we need to skip
-                                // a few things over.
-                                // we skip the saved 'ebp'.
-                                // we skip the pushed by 'call' ip.
-                                // we skip each previous argument.
-                                write_code(`mov eax, [ebp + 8 + ${i * 4}]`)
-                            }
-                        }
-                    },
-                    location: arg_var.location,
-                    value_type: arg_var.arg_type
-                }
-                read_var(arg_var_declare, world).write_all()
-            })
-    
-            write_internal(world, data)
-    
-            write_code(`jmp ${label_ret_none}`)     // by default ret none
-            write_code(`${label_ret_func}:`)        // if read "ret", go here
-            write_code(`mov esp, ebp`)
-            write_code(`pop ebp`)
-            write_code(`ret`)
-            write_code(`${label_ret_none}:`)
-            write_code(`xor eax, eax`)
-            write_code(`jmp ${label_ret_func}`)
-            write_code(`${label_end_func}:`)
-    
-            return data
+            const func_def = read_func({
+                name,
+                ret_type: { value: ret_type },
+                internal_code: write_internal,
+                vars: args
+            }, this)
+            func_def.write_all()
+            return func_def
         }
     
         get strlen() {
@@ -1030,7 +1025,7 @@ module.exports.generate_asm = ast => {
                 name: 'outln',
                 ret_type: 'bol',
                 args: [ this.make_arg('data', 'str') ],
-                write_internal: (world) => {
+                write_internal: world => {
                     read_call_function({
                         name: 'out',
                         args: [{
@@ -1096,11 +1091,81 @@ module.exports.generate_asm = ast => {
                 name: 'num2str',
                 ret_type: 'str',
                 args: [ this.make_arg('data', 'num') ],
-                write_internal: () => {
-                    // todo:
-                    write_code('xor eax, eax')
-                    write_code('xor eax, eax')
-                    write_code('xor eax, eax')
+                write_internal: (world, data) => {
+                    const count_digits_label = create_label()
+                    write_code(`mov eax, [ebp - 4]`)
+                    write_code(`xor ecx, ecx`)
+                    write_code(`mov ebx, 10`)
+                    write_code(`${count_digits_label}:`)
+                    write_code(`xor edx, edx`)
+                    write_code(`div ebx`)
+                    write_code(`inc ecx`)
+                    write_code(`cmp eax, 0`)
+                    write_code(`jne ${count_digits_label}`)
+                    // number of digits in eax
+                    write_code(`mov eax, ecx`)
+
+                    // store length to local var
+                    write_code(`sub esp, 4`)
+                    write_code(`mov [ebp - 8], ecx`)
+                    
+                    // allocate a char per digit + null terminator
+                    write_code(`push ebp`)
+                    write_code(`mov ebx, 4`)
+                    write_code(`mul ebx`)
+                    write_code(`add eax, 4`)
+                    write_code(`xor ebx, ebx`)
+                    write_code(`mov ecx, eax`)
+                    write_code(`mov edx, 0x3`)
+                    write_code(`mov esi, 0x22`)
+                    write_code(`mov edi, -1`)
+                    write_code(`xor ebp, ebp`)
+                    write_code(`mov eax, 192`)
+                    // pointer to address space is now in eax
+                    write_code(`int 0x80`)
+                    write_code(`pop ebp`)
+
+                    // add null terminator at the end
+                    write_code(`push ebx`)
+                    write_code(`mov ebx, [ebp - 8]`)
+                    write_code(`mov [eax + ebx], byte 0x1`)
+                    write_code(`pop ebx`)
+
+                    // store address
+                    write_code(`sub esp, 4`)
+                    write_code(`mov [ebp - 12], eax`)
+
+                    // fill the mapped space with the ascii of each digit
+                    const fill_loop = create_label()
+                    write_code(`mov eax, [ebp - 4]`)
+                    write_code(`xor ecx, ecx`)
+                    write_code(`mov ebx, 10`)
+                    write_code(`${fill_loop}:`)
+                    write_code(`xor edx, edx`)
+                    write_code(`div ebx`)
+                    write_code(`push eax`)
+                    write_code(`push ebx`)
+                    write_code(`mov eax, [ebp - 12]`)
+                    write_code(`mov ebx, [ebp - 8]`)
+                    write_code(`add eax, ebx`)
+                    write_code(`sub eax, 1`)
+                    write_code(`sub eax, ecx`)
+                    write_code(`mov ebx, eax`)
+                    write_code(`mov eax, edx`)
+                    write_code(`add eax, byte '0'`)
+                    write_code(`mov byte [ebx], al`)
+                    write_code(`pop ebx`)
+                    write_code(`pop eax`)
+                    write_code(`inc ecx`)
+                    write_code(`cmp eax, 0`)
+                    write_code(`jne ${fill_loop}`)
+
+                    // returns the pointer to the string in eax
+                    // and also store the size of mapped data to ebx (for lazy free)
+                    write_code(`mov eax, [ebp - 12]`)
+                    write_code(`mov ebx, [ebp - 8]`)
+                    write_code(`inc ebx`) // null terminator
+                    write_code(`jmp ${data.label_ret_func}`)
                 }
             })
         }

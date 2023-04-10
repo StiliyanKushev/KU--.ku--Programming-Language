@@ -16,6 +16,8 @@ const core_sim = new class {
         this.parent = undefined
         this.context = create_context()
 
+        this.context.functions.set("strlen", this.strlen)
+
         // stdio 
         this.context.functions.set("out", this.out)
         this.context.functions.set("outln", this.outln)
@@ -152,6 +154,23 @@ const core_sim = new class {
             ret_type: 'bol'
         })
    }
+
+   // returns length of a given string
+   get strlen() {
+    return this.make_f({
+        name: 'strlen',
+        vars: [ this.make_arg('data', 'str') ],
+        code_func: function () {
+            const data = this.context.variables.get('data')
+            if(data.length) {
+                return data.length
+            } else {
+                return -1
+            }
+        },
+        ret_type: 'num'
+    })
+}
 }
 
 // only used to execute internal code from "core"

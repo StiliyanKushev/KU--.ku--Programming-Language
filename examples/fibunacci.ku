@@ -54,6 +54,18 @@
 
 # @outln @num2str result
 
-:var1/str = "Hello"
+# :left/str :right/str
+# left = "Hello, "
 
-@outln var1
+# print:/str { @out left + right @outln "" }
+
+# right = "World!"    (@print)
+# right = "From KU!"  (@print)
+
+# :text/str = "Hello and welcome to my language!"
+
+# @out text @out "\n"
+
+# @out text @out " -- length: " @outln @num2str @strlen text
+
+@outln @num2str 2
