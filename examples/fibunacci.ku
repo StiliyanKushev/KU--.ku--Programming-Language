@@ -37,21 +37,23 @@
 # :myvar/num = @sum 1, 1 + ++a
 # :test/num = 5
 
-:variable/num = 5
+# :variable/num = 5
 
-sum:/num a num {
-    :c/num = -1
-    inner:/num {
-        c = 0
-        ret a + variable++ + c 
-    }
-    ret @inner
-}
+# sum:/num a num {
+#     :c/num = -1
+#     inner:/num {
+#         c = 0
+#         ret a + variable++ + c 
+#     }
+#     ret @inner
+# }
 
-:result/num = @sum 4
+# :result/num = @sum 4
 
-:test/num = 123
+# :test/num = 123
 
-:result2/num = @sum 4
+# @outln @num2str result
 
-# @outln @num2str result2
+:var1/str = "Hello"
+
+@outln var1

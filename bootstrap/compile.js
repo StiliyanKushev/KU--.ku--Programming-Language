@@ -28,6 +28,7 @@ module.exports.compile_asm = (asm, output) => {
     fs.rmSync(working_dir, { recursive: true, force: true })
     try {cp.execFileSync(exe_path)} 
     catch (err) {console.log(err.stderr.toString())}
+    console.log('-'.repeat(process.stdout.columns))
 }
 
 // ------------------------------------------------------------------------ //
@@ -86,8 +87,6 @@ const create_context = (opt_extra = {}) => ({
 // simple function to create a unique label name
 let _label_inc = 0, create_label = () => '__' + (++_label_inc).toFixed(10).replace('.', '_')
 
-const core_com = undefined // todo: some built in functions after _start
-
 module.exports.generate_asm = ast => {
     console.dir(ast, { depth: null })
     console.log('-'.repeat(process.stdout.columns))
@@ -99,6 +98,7 @@ module.exports.generate_asm = ast => {
             const hexCode = asciiCode.toString(16)
             arr.push('0x' + hexCode)
         }
+        arr.push('0x0')
         return arr
     }
 
@@ -263,13 +263,9 @@ module.exports.generate_asm = ast => {
         } else if(node.type == 'str') {
             check_value_type(node.type)
             let string_label = create_label()
-            let string_size = node.value.length
             let string_hex = util_string_to_hex_arr(node.value).join(', ')
             return {
                 type: node.type,
-                string_label,
-                string_size,
-                string_hex,
                 write_all: () => {
                     write_code(`;; str`)
                     write_data(`${string_label}: db ${string_hex}`)
@@ -709,8 +705,8 @@ module.exports.generate_asm = ast => {
                     })
         
                     write_code(`;; --- declare "${name}" [${type}] (${offset}) --- ;;`)
-                    write_code(`sub esp, ${type_size}`)
                     com_value.write_all()
+                    write_code(`sub esp, ${type_size}`)
                     write_code(`mov [ebp-${offset}], eax`)
                 }
             }
@@ -869,13 +865,244 @@ module.exports.generate_asm = ast => {
             } else if(node.type == 'kw' && node.value == 'continue') {
                 // return read_continue(node, world)
                 throw_not_implemented(node, world)
-            } else if(node.type == 'internal') {
-                // only for core functionality
-                // exec_internal(node, world)
-                throw_not_implemented(node, world)
             } else {
                 throw_unknown_node_type(node, world)
             }
+        }
+    }
+
+    // define all core functions/constants
+    const core_com = new class {
+        constructor() {
+            this.parent = undefined
+            this.context = create_context()
+    
+            this.context.functions.set("strlen", this.strlen)
+
+            // stdio 
+            this.context.functions.set("out", this.out)
+            this.context.functions.set("outln", this.outln)
+    
+            // cast 
+            this.context.functions.set("bol2str", this.bol2str)
+            this.context.functions.set("num2str", this.num2str)
+            this.context.functions.set("str2num", this.str2num)
+            this.context.functions.set("str2bol", this.str2bol)
+        
+            write_code('\n\t;; ---------- PROGRAM BEGIN ---------- ;;\n')
+        }
+    
+        make_arg(name, type) {
+            return {
+                type: 'var',
+                value: name,
+                location: { 
+                    pos: 'internal', 
+                    line: 'internal', 
+                    col: 'internal' 
+                },
+                arg_type: {
+                    type: 'kw',
+                    value: type
+                } 
+            }
+        }
+    
+        make_func({ name, args, write_internal, ret_type }) {
+            const ret_size = types_offsets[ret_type]
+            const label_start_func = create_label()
+            const label_end_func = create_label()
+            const label_ret_func = create_label()
+            const label_ret_none = create_label()
+    
+            let data = {
+                name, ret_type, ret_size, args,
+                label_start_func,
+                label_end_func,
+                label_ret_func,
+                label_ret_none
+            }
+    
+            this.context.functions.set(name, data)
+
+            const world = {
+                parent: this,
+                context: create_context({
+                    func_self: data
+                }),
+            }
+    
+            // initially we always jump over the function
+            // we only want to go in if it's called
+            write_code(`jmp ${label_end_func}`)
+            write_code(`${label_start_func}:`)
+            write_code(`push ebp`)
+            write_code(`mov ebp, esp`)
+    
+            write_code(`;; --- core: function declare "${name}" [${ret_type}] --- ;;`)
+            args.forEach((arg_var, i) => {
+                const arg_var_declare = {
+                    type: 'var',
+                    mode: 'declare',
+                    name: arg_var.value,
+                    value: {
+                        type: 'override',
+                        override: {
+                            write_all: () => {
+                                // to get the value we need to skip
+                                // a few things over.
+                                // we skip the saved 'ebp'.
+                                // we skip the pushed by 'call' ip.
+                                // we skip each previous argument.
+                                write_code(`mov eax, [ebp + 8 + ${i * 4}]`)
+                            }
+                        }
+                    },
+                    location: arg_var.location,
+                    value_type: arg_var.arg_type
+                }
+                read_var(arg_var_declare, world).write_all()
+            })
+    
+            write_internal(world, data)
+    
+            write_code(`jmp ${label_ret_none}`)     // by default ret none
+            write_code(`${label_ret_func}:`)        // if read "ret", go here
+            write_code(`mov esp, ebp`)
+            write_code(`pop ebp`)
+            write_code(`ret`)
+            write_code(`${label_ret_none}:`)
+            write_code(`xor eax, eax`)
+            write_code(`jmp ${label_ret_func}`)
+            write_code(`${label_end_func}:`)
+    
+            return data
+        }
+    
+        get strlen() {
+            const loop_start = create_label()
+            const loop_end = create_label()
+            return this.make_func({
+                name: 'strlen',
+                ret_type: 'num',
+                args: [ this.make_arg('data', 'str') ],
+                write_internal: (_, data) => {
+                    write_code(`xor ecx, ecx`)
+                    write_code(`mov eax, [ebp + 8]`)
+                    write_code(`${loop_start}:`)
+                    write_code(`cmp byte [eax], 0`)
+                    write_code(`je ${loop_end}`)
+                    write_code(`inc eax`)
+                    write_code(`inc ecx`)
+                    write_code(`jmp ${loop_start}`)
+                    write_code(`${loop_end}:`)
+                    write_code(`mov eax, ecx`)
+                    write_code(`jmp ${data.label_ret_func}`)
+                }
+            })
+        }
+
+        get out() {
+            return this.make_func({
+                name: 'out',
+                ret_type: 'bol',
+                args: [ this.make_arg('data', 'str') ],
+                write_internal: world => {
+                    read_call_function({
+                        name: 'strlen',
+                        args: [{
+                            type: 'var',
+                            value: 'data',
+                        }],
+                    }, world).write_all()
+                    write_code('mov edx, eax')
+                    write_code(`mov eax, [ebp + 8]`)
+                    write_code('mov ecx, eax')
+                    write_code('mov eax, 4')
+                    write_code('mov ebx, 1')
+                    write_code('int 0x80')
+                }
+            })
+        }
+
+        get outln() {
+            return this.make_func({
+                name: 'outln',
+                ret_type: 'bol',
+                args: [ this.make_arg('data', 'str') ],
+                write_internal: (world) => {
+                    read_call_function({
+                        name: 'out',
+                        args: [{
+                            type: 'var',
+                            value: 'data',
+                        }],
+                    }, world).write_all()
+                    read_call_function({
+                        name: 'out',
+                        args: [{
+                            type: 'str',
+                            value: '\n',
+                        }],
+                    }, world).write_all()
+                }
+            })
+        }
+        
+        get str2num() {
+            return this.make_func({
+                name: 'str2num',
+                ret_type: 'num',
+                args: [ this.make_arg('data', 'str') ],
+                write_internal: () => {
+                    // todo:
+                    write_code('xor eax, eax')
+                    write_code('xor eax, eax')
+                    write_code('xor eax, eax')
+                }
+            })
+        }
+
+        get str2bol() {
+            return this.make_func({
+                name: 'str2bol',
+                ret_type: 'bol',
+                args: [ this.make_arg('data', 'str') ],
+                write_internal: () => {
+                    // todo:
+                    write_code('xor eax, eax')
+                    write_code('xor eax, eax')
+                    write_code('xor eax, eax')
+                }
+            })
+        }
+
+        get bol2str() {
+            return this.make_func({
+                name: 'bol2str',
+                ret_type: 'str',
+                args: [ this.make_arg('data', 'bol') ],
+                write_internal: () => {
+                    // todo:
+                    write_code('xor eax, eax')
+                    write_code('xor eax, eax')
+                    write_code('xor eax, eax')
+                }
+            })
+        }
+
+        get num2str() {
+            return this.make_func({
+                name: 'num2str',
+                ret_type: 'str',
+                args: [ this.make_arg('data', 'num') ],
+                write_internal: () => {
+                    // todo:
+                    write_code('xor eax, eax')
+                    write_code('xor eax, eax')
+                    write_code('xor eax, eax')
+                }
+            })
         }
     }
 
