@@ -100,15 +100,15 @@ module.exports.generate_asm = ast => {
     // then goes through that cache and frees all entries.
     // note: this function expects the address to be at eax
     // note: this function expects the size/length to be at ebx
-    const lazy_free = function() {
+    const lazy_free = (context) => {
         write_code(`;; -- lazy_free -- ;;`)
-        const addr_offset = this.var_offset += 4
-        const size_offset = this.var_offset += 4
+        const addr_offset = context.var_offset += 4
+        const size_offset = context.var_offset += 4
         write_code(`sub esp, 4`)
         write_code(`mov [ebp - ${addr_offset}], eax`)
         write_code(`sub esp, 4`)
         write_code(`mov [ebp - ${size_offset}], ebx`)
-        this.free_set.add([addr_offset, size_offset])
+        context.free_set.add([addr_offset, size_offset])
     }
 
     // this function will typically run at the end of a scope.
@@ -127,17 +127,13 @@ module.exports.generate_asm = ast => {
     }
 
     // universal function for preparing context of a scope
-    const create_context = (opt_extra = {}) => {
-        const context = {
-            ...opt_extra,
-            variables: new Map(), // map variable name to offset of ebp for parent's scope
-            functions: new Map(), // map function name to function label
-            var_offset: 0,        // incremented offset for each new local variable on stack
-            free_set: new Set(),  // set contains [addr_offset, size_offset] elements
-        }
-        context.lazy_free = lazy_free.bind(context)
-        return context
-    }
+    const create_context = (opt_extra = {}) => ({
+        ...opt_extra,
+        variables: new Map(), // map variable name to offset of ebp for parent's scope
+        functions: new Map(), // map function name to function label
+        var_offset: 0,        // incremented offset for each new local variable on stack
+        free_set: new Set(),  // set contains [addr_offset, size_offset] elements
+    })
 
     const util_string_to_hex_arr = (string) => {
         let arr = []
@@ -469,6 +465,17 @@ module.exports.generate_asm = ast => {
             name: name,
             ret_size: ret_size,
             write_all: () => {
+                // note: Pretty much the same reason as in read_binary,
+                // note: we can't really push eax and expect the stack
+                // note: not to change in between com_value.write_all
+                // note: and push eax calls. If such thing were to happen,
+                // note: then the pushed arguments would be spread apart
+                // note: and we would not be passing the correct arguments
+                // note: to the function. That's why we have to store them
+                // note: in the local stack frame temporarily, then push
+                // note: them in the correct order, and clear them afterwards.
+                // todo: 
+
                 func_args.reverse().map((func_arg, ri) => {
                     let i = func_args.length - 1 - ri
                     let arg_type = func_arg.arg_type.value
@@ -487,7 +494,7 @@ module.exports.generate_asm = ast => {
                 if(types_should_be_freed.includes(ret_type)) {
                     // value is a pointer to a type that should be freed
                     // as the memory at the said pointer is mapped to the heap.
-                    parent.context.lazy_free()
+                    lazy_free(parent.context)
                 }
             }
         }
@@ -535,6 +542,32 @@ module.exports.generate_asm = ast => {
     }
 
     const read_binary = (node, parent) => {
+        // note: We have something like:
+        // note:
+        // note: push ebx
+        // note: ...
+        // note: pop ebx
+        // note: 
+        // note: Inside of the `...` if we ever
+        // note: modify the stack size by doing
+        // note: sub esp, 4
+        // note: for whatever reason, ex: when
+        // note: we call lazy_free, this would
+        // note: resolve in weird bugs because
+        // note: the top of the stack is no
+        // note: longer ebx, and when calling
+        // note: pop ebx, we actually load
+        // note: something else into the ebx
+        // note: register.
+
+        // note: to mitigate this problem,
+        // note: instead of simple push ebx,
+        // note: pop ebx, we will keep track
+        // note: of the shifted var_offset
+        // note: and do: mov ebx, [esp - shift]
+        // note: check `post_binary_read_var_offset`
+        // note: and `pre_binary_read_var_offset`
+
         const left = read_value(node.left, parent)
         const right = read_value(node.right, parent)
     
@@ -596,6 +629,7 @@ module.exports.generate_asm = ast => {
         const write_all = () => {
             write_code(`;; --- read binary --- ;;`)
             write_code(`push ebx`)
+            const pre_binary_read_var_offset = parent.context.var_offset
 
             // ex: false > false
             if(!req_type.includes(left.type)) {
@@ -616,6 +650,27 @@ module.exports.generate_asm = ast => {
             if(node.operator == '+') {
                 if(type == 'num') {
                     write_code(`add eax, ebx ;; + `)
+                } else if (type == 'str') {
+                    write_code(`;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;`)
+                    write_code(`mov ecx, eax`)
+                    read_call_function({
+                        name: 'strapnd',
+                        args: [{
+                            type: 'override',
+                            override: {
+                                write_all: () => {
+                                    write_code(`mov eax, ebx`)
+                                }
+                            }
+                        }, {
+                            type: 'override',
+                            override: {
+                                write_all: () => {
+                                    write_code(`mov eax, ecx`)
+                                }
+                            }
+                        }].reverse(),
+                    }, parent).write_all()
                 } else {
                     throw_unsupported_operation(node, parent)
                 }
@@ -743,7 +798,10 @@ module.exports.generate_asm = ast => {
                 }
             }
 
-            write_code(`pop ebx`)
+            const post_binary_read_var_offset = parent.context.var_offset
+            const stack_shift = post_binary_read_var_offset - pre_binary_read_var_offset
+            write_code(`mov ebx, [esp + ${stack_shift}]`)
+            // write_code(`pop ebx`)
         }
 
         return {
@@ -772,8 +830,8 @@ module.exports.generate_asm = ast => {
                     })
         
                     write_code(`;; --- declare "${name}" [${type}] (${offset}) --- ;;`)
-                    com_value.write_all()
                     write_code(`sub esp, ${type_size}`)
+                    com_value.write_all()
                     write_code(`mov [ebp-${offset}], eax`)
                 }
             }
@@ -935,6 +993,7 @@ module.exports.generate_asm = ast => {
             this.context = create_context()
     
             this.context.functions.set("strlen", this.strlen)
+            this.context.functions.set("strapnd", this.strapnd)
 
             // stdio 
             this.context.functions.set("out", this.out)
@@ -992,6 +1051,118 @@ module.exports.generate_asm = ast => {
                     write_code(`jmp ${loop_start}`)
                     write_code(`${loop_end}:`)
                     write_code(`mov eax, ecx`)
+                    write_code(`jmp ${data.label_ret_func}`)
+                }
+            })
+        }
+
+        get strapnd() {
+            return this.make_func({
+                name: 'strapnd',
+                ret_type: 'str',
+                args: [ this.make_arg('l', 'str'), this.make_arg('r', 'str') ],
+                write_internal: (world, data) => {
+                    const l_loop_label = create_label()
+                    const r_loop_label = create_label()
+                    read_call_function({
+                        name: 'strlen',
+                        args: [{
+                            type: 'override',
+                            override: {
+                                write_all: () => {
+                                    write_code(`mov eax, [ebp - 4]`)
+                                }
+                            }
+                        }],
+                    }, world).write_all()
+                    write_code(`sub esp, 4`)
+                    write_code(`mov [ebp - 12], eax`)     
+                    read_call_function({
+                        name: 'strlen',
+                        args: [{
+                            type: 'override',
+                            override: {
+                                write_all: () => {
+                                    write_code(`mov eax, [ebp - 8]`)
+                                }
+                            }
+                        }],
+                    }, world).write_all()
+                    write_code(`sub esp, 4`)
+                    write_code(`mov [ebp - 16], eax`)     
+                    write_code(`mov eax, [ebp - 12]`)
+                    write_code(`mov ebx, [ebp - 16]`)
+                    write_code(`add eax, ebx`)   
+                    write_code(`push ebp`)
+                    write_code(`xor ebx, ebx`)
+                    write_code(`mov ecx, eax`)
+                    write_code(`mov edx, 0x3`)
+                    write_code(`mov esi, 0x22`)
+                    write_code(`mov edi, -1`)
+                    write_code(`xor ebp, ebp`)
+                    write_code(`mov eax, 192`)
+                    write_code(`int 0x80`)
+                    write_code(`pop ebp`)
+                    write_code(`sub esp, 4`)
+                    write_code(`mov [ebp - 20], eax`)
+                    write_code(`xor eax, eax`)
+                    write_code(`sub esp, 4`)
+                    write_code(`mov [ebp - 24], eax`)
+                    write_code(`mov ebx, [ebp - 12]`)
+                    write_code(`${l_loop_label}:`)
+                    write_code(`mov eax, [ebp - 24]`)
+                    write_code(`push eax`)
+                    write_code(`push ebx`)
+                    write_code(`mov eax, [ebp - 20]`)
+                    write_code(`mov ebx, [ebp - 24]`)
+                    write_code(`add eax, ebx`)
+                    write_code(`push eax`)
+                    write_code(`mov ebx, [ebp - 24]`)
+                    write_code(`mov eax, [ebp - 4]`)
+                    write_code(`add eax, ebx`)
+                    write_code(`mov bl, byte [eax]`)
+                    write_code(`pop eax`)
+                    write_code(`mov byte [eax], bl`)
+                    write_code(`pop ebx`)
+                    write_code(`pop eax`)
+                    write_code(`inc eax`)
+                    write_code(`mov [ebp - 24], eax`)
+                    write_code(`cmp eax, ebx`)
+                    write_code(`jne ${l_loop_label}`)
+                    write_code(`xor eax, eax`)
+                    write_code(`mov [ebp - 24], eax`)
+                    write_code(`mov ebx, [ebp - 16]`)
+                    write_code(`${r_loop_label}:`)
+                    write_code(`mov eax, [ebp - 24]`)
+                    write_code(`push eax`)
+                    write_code(`push ebx`)
+                    write_code(`mov eax, [ebp - 20]`)
+                    write_code(`mov ebx, [ebp - 24]`)
+                    write_code(`add eax, ebx`)
+                    write_code(`add eax, [ebp - 12]`)
+                    write_code(`push eax`)
+                    write_code(`mov ebx, [ebp - 24]`)
+                    write_code(`mov eax, [ebp - 8]`)
+                    write_code(`add eax, ebx`)
+                    write_code(`mov bl, byte [eax]`)
+                    write_code(`pop eax`)
+                    write_code(`mov byte [eax], bl`)
+                    write_code(`pop ebx`)
+                    write_code(`pop eax`)
+                    write_code(`inc eax`)
+                    write_code(`mov [ebp - 24], eax`)
+                    write_code(`cmp eax, ebx`)
+                    write_code(`jne ${r_loop_label}`)
+                    write_code(`mov eax, [ebp - 20]`)
+                    write_code(`add eax, [ebp - 12]`)
+                    write_code(`add eax, [ebp - 16]`)
+                    write_code(`mov byte [eax], 0x0`)
+
+                    // returns the pointer to the string in eax
+                    // and also store the size of mapped data to ebx (for lazy free)
+                    write_code(`mov eax, [ebp - 20]`)
+                    write_code(`mov ebx, [ebp - 12]`)
+                    write_code(`add ebx, [ebp - 16]`)
                     write_code(`jmp ${data.label_ret_func}`)
                 }
             })
