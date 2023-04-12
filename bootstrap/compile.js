@@ -7,7 +7,7 @@ const {
 } = require('./cmd')
 
 module.exports.compile_asm = (asm, output) => {
-    console.log(asm)
+    console.log(asm.split('\n').map((ln, i) => `${i + 1}: ${ln}`).join('\n'))
     console.log('-'.repeat(process.stdout.columns))
 
     let working_dir = path.join(os.tmpdir(), `./${Math.random()}`)
@@ -284,7 +284,7 @@ module.exports.generate_asm = ast => {
     const read_value = (node, parent, opt_value_type) => {
         if(!node) {
             return {
-                write_all: () => write_code(`mov eax, 0`)
+                write_all: () => write_code(`xor eax, eax`)
             }
         }
 
@@ -422,7 +422,7 @@ module.exports.generate_asm = ast => {
                                     // we skip the saved 'ebp'.
                                     // we skip the pushed by 'call' ip.
                                     // we skip each previous argument.
-                                    write_code(`mov eax, [ebp + 8 + ${i * 4}]`)
+                                    write_code(`mov eax, [ebp + 8 + ${(i * 4) + 4}]`)
                                 }
                             }
                         },
@@ -475,16 +475,27 @@ module.exports.generate_asm = ast => {
                 // note: in the local stack frame temporarily, then push
                 // note: them in the correct order, and clear them afterwards.
                 // todo: 
+                let scattered_args = []
 
                 func_args.reverse().map((func_arg, ri) => {
                     let i = func_args.length - 1 - ri
                     let arg_type = func_arg.arg_type.value
                     const com_value = read_value(node.args[i], parent, arg_type)
                     com_value.write_all()
-                    write_code(`push eax`)
                     // we push an arg, so we increase var offset
                     parent.context.var_offset += 4
+                    scattered_args.push(parent.context.var_offset)
+                    
+                    write_code(`push eax ;; sctrd arg ${parent.context.var_offset}`)
                 })
+
+                write_code(`;; --- scattered arguments --- ;;`)
+                scattered_args.forEach(arg_offset => {
+                    write_code(`mov eax, [ebp - ${arg_offset}]`)
+                    write_code(`push eax`)
+                    parent.context.var_offset += 4
+                })
+
                 write_code(`call ${_start_func}`)
                 
                 // clear args from local space now
@@ -629,7 +640,7 @@ module.exports.generate_asm = ast => {
         const write_all = () => {
             write_code(`;; --- read binary --- ;;`)
             write_code(`push ebx`)
-            const pre_binary_read_var_offset = parent.context.var_offset
+            const pre_binary_read_var_offset = parent.context.var_offset += 4
 
             // ex: false > false
             if(!req_type.includes(left.type)) {
@@ -651,7 +662,6 @@ module.exports.generate_asm = ast => {
                 if(type == 'num') {
                     write_code(`add eax, ebx ;; + `)
                 } else if (type == 'str') {
-                    write_code(`;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;`)
                     write_code(`mov ecx, eax`)
                     read_call_function({
                         name: 'strapnd',
@@ -1027,7 +1037,7 @@ module.exports.generate_asm = ast => {
                 name,
                 ret_type: { value: ret_type },
                 internal_code: write_internal,
-                vars: args
+                vars: args.reverse()
             }, this)
             func_def.write_all()
             return func_def
@@ -1064,35 +1074,57 @@ module.exports.generate_asm = ast => {
                 write_internal: (world, data) => {
                     const l_loop_label = create_label()
                     const r_loop_label = create_label()
-                    read_call_function({
-                        name: 'strlen',
-                        args: [{
-                            type: 'override',
-                            override: {
-                                write_all: () => {
-                                    write_code(`mov eax, [ebp - 4]`)
-                                }
-                            }
-                        }],
+                    
+                    // get length of left and store to a varaible
+                    read_var({
+                        mode: 'declare',
+                        name: 'l_length',
+                        value_type: { value: 'num' },
+                        value: {
+                            type: 'call',
+                            name: 'strlen',
+                            args: [{
+                                type: 'var',
+                                value: 'l'
+                            }],
+                        }
                     }, world).write_all()
-                    write_code(`sub esp, 4`)
-                    write_code(`mov [ebp - 12], eax`)     
-                    read_call_function({
-                        name: 'strlen',
-                        args: [{
-                            type: 'override',
-                            override: {
-                                write_all: () => {
-                                    write_code(`mov eax, [ebp - 8]`)
-                                }
-                            }
-                        }],
+
+                    // get length of right and store to a varaible
+                    read_var({
+                        mode: 'declare',
+                        name: 'r_length',
+                        value_type: { value: 'num' },
+                        value: {
+                            type: 'call',
+                            name: 'strlen',
+                            args: [{
+                                type: 'var',
+                                value: 'r'
+                            }],
+                        }
                     }, world).write_all()
-                    write_code(`sub esp, 4`)
-                    write_code(`mov [ebp - 16], eax`)     
-                    write_code(`mov eax, [ebp - 12]`)
-                    write_code(`mov ebx, [ebp - 16]`)
-                    write_code(`add eax, ebx`)   
+
+                    // store the total length into a variable
+                    read_var({
+                        mode: 'declare',
+                        name: 'total_length',
+                        value_type: { value: 'num' },
+                        value: {
+                            type: 'binary',
+                            operator: '+',
+                            left: {
+                                type: 'var',
+                                value: 'l_length',
+                            },
+                            right: {
+                                type: 'var',
+                                value: 'r_length',
+                            }
+                        }
+                    }, world).write_all()
+
+                    // allocate space for that string and store to eax
                     write_code(`push ebp`)
                     write_code(`xor ebx, ebx`)
                     write_code(`mov ecx, eax`)
@@ -1103,66 +1135,222 @@ module.exports.generate_asm = ast => {
                     write_code(`mov eax, 192`)
                     write_code(`int 0x80`)
                     write_code(`pop ebp`)
-                    write_code(`sub esp, 4`)
-                    write_code(`mov [ebp - 20], eax`)
-                    write_code(`xor eax, eax`)
-                    write_code(`sub esp, 4`)
-                    write_code(`mov [ebp - 24], eax`)
-                    write_code(`mov ebx, [ebp - 12]`)
+                    
+                    // store the allocated space address to a variable
+                    read_var({
+                        mode: 'declare',
+                        name: 'addr',
+                        value_type: { value: 'str' },
+                        value: {
+                            type: 'override',
+                            override: {
+                                write_all: () => {} // default eax
+                            }
+                        }
+                    }, world).write_all()
+
+                    // temporary store for the current char to put
+                    // to the new address space.
+                    read_var({
+                        mode: 'declare',
+                        name: 'temp',
+                        value_type: { value: 'str' },
+                        value: null
+                    }, world).write_all()
+                    const temp_offset = world.context.variables.get('temp').offset
+
+                    // current index variable
+                    read_var({
+                        mode: 'declare',
+                        name: 'index',
+                        value_type: { value: 'num' },
+                        value: null
+                    }, world).write_all()
+
+                    // fill the allocated space with the left string
                     write_code(`${l_loop_label}:`)
-                    write_code(`mov eax, [ebp - 24]`)
-                    write_code(`push eax`)
-                    write_code(`push ebx`)
-                    write_code(`mov eax, [ebp - 20]`)
-                    write_code(`mov ebx, [ebp - 24]`)
-                    write_code(`add eax, ebx`)
-                    write_code(`push eax`)
-                    write_code(`mov ebx, [ebp - 24]`)
-                    write_code(`mov eax, [ebp - 4]`)
-                    write_code(`add eax, ebx`)
+                    // load the pointer of the "l" variable to eax
+                    read_value({
+                        type: 'var',
+                        value: 'l'
+                    }, world).write_all()
+                    write_code(`mov ebx, eax`)
+                    read_value({
+                        type: 'var',
+                        value: 'index'
+                    }, world).write_all()
+                    write_code(`add ebx, eax`)
+                    // we now have a pointer to the char of "l" at "index" in eax
+                    write_code(`mov eax, ebx`)
+                    // assign "temp" the ascii "char" at that pointer
                     write_code(`mov bl, byte [eax]`)
-                    write_code(`pop eax`)
+                    write_code(`mov byte [ebp - ${temp_offset}], bl`)
+                    // load index to eax again
+                    read_value({
+                        type: 'var',
+                        value: 'index'
+                    }, world).write_all()
+                    write_code(`mov ebx, eax`)
+                    read_value({
+                        type: 'var',
+                        value: 'addr'
+                    }, world).write_all()
+                    write_code(`add ebx, eax`)
+                    // we now have a pointer to the dest addr at the correct index
+                    write_code(`mov eax, ebx`)
+                    // load the "temp" character to the dest addr space
+                    write_code(`mov bl, byte [ebp - ${temp_offset}]`)
                     write_code(`mov byte [eax], bl`)
-                    write_code(`pop ebx`)
-                    write_code(`pop eax`)
-                    write_code(`inc eax`)
-                    write_code(`mov [ebp - 24], eax`)
-                    write_code(`cmp eax, ebx`)
+                    // increase the index
+                    read_postfix({
+                        type: 'prefix',
+                        name: 'index',
+                        op: { type: 'op', value: '++' },
+                    }, world).write_all()
+                    // conditionally, loop back until we load the entire "l" string
+                    read_value({
+                        type: 'var',
+                        value: 'index'
+                    }, world).write_all()
+                    write_code(`mov ebx, eax`)
+                    read_value({
+                        type: 'var',
+                        value: 'l_length'
+                    }, world).write_all()
+                    write_code(`cmp ebx, eax`)
                     write_code(`jne ${l_loop_label}`)
-                    write_code(`xor eax, eax`)
-                    write_code(`mov [ebp - 24], eax`)
-                    write_code(`mov ebx, [ebp - 16]`)
+
+                    read_var({
+                        mode: 'assign',
+                        name: 'index',
+                        value: null
+                    }, world).write_all()
+
+                    // fill the allocated space with the right string
                     write_code(`${r_loop_label}:`)
-                    write_code(`mov eax, [ebp - 24]`)
-                    write_code(`push eax`)
-                    write_code(`push ebx`)
-                    write_code(`mov eax, [ebp - 20]`)
-                    write_code(`mov ebx, [ebp - 24]`)
-                    write_code(`add eax, ebx`)
-                    write_code(`add eax, [ebp - 12]`)
-                    write_code(`push eax`)
-                    write_code(`mov ebx, [ebp - 24]`)
-                    write_code(`mov eax, [ebp - 8]`)
-                    write_code(`add eax, ebx`)
+                    // load the pointer of the "r" variable to eax
+                    read_value({
+                        type: 'var',
+                        value: 'r'
+                    }, world).write_all()
+                    write_code(`mov ebx, eax`)
+                    read_value({
+                        type: 'var',
+                        value: 'index'
+                    }, world).write_all()
+                    write_code(`add ebx, eax`)
+                    // we now have a pointer to the char of "r" at "index" in eax
+                    write_code(`mov eax, ebx`)
+                    // assign "temp" the ascii "char" at that pointer
                     write_code(`mov bl, byte [eax]`)
-                    write_code(`pop eax`)
+                    write_code(`mov byte [ebp - ${temp_offset}], bl`)
+                    // load index to eax again
+                    read_value({
+                        type: 'var',
+                        value: 'index'
+                    }, world).write_all()
+                    write_code(`mov ebx, eax`)
+                    read_value({
+                        type: 'var',
+                        value: 'addr'
+                    }, world).write_all()
+                    write_code(`add ebx, eax`)
+                    // add the length of 'left' to index for new address space
+                    read_value({
+                        type: 'var',
+                        value: 'l_length'
+                    }, world).write_all()
+                    write_code(`add ebx, eax`)
+                    // we now have a pointer to the dest addr at the correct index
+                    write_code(`mov eax, ebx`)
+                    // load the "temp" character to the dest addr space
+                    write_code(`mov bl, byte [ebp - ${temp_offset}]`)
                     write_code(`mov byte [eax], bl`)
-                    write_code(`pop ebx`)
-                    write_code(`pop eax`)
-                    write_code(`inc eax`)
-                    write_code(`mov [ebp - 24], eax`)
-                    write_code(`cmp eax, ebx`)
+                    // increase the index
+                    read_postfix({
+                        type: 'prefix',
+                        name: 'index',
+                        op: { type: 'op', value: '++' },
+                    }, world).write_all()
+                    // conditionally, loop back until we load the entire "r" string
+                    read_value({
+                        type: 'var',
+                        value: 'index'
+                    }, world).write_all()
+                    write_code(`mov ebx, eax`)
+                    read_value({
+                        type: 'var',
+                        value: 'r_length'
+                    }, world).write_all()
+                    write_code(`cmp ebx, eax`)
                     write_code(`jne ${r_loop_label}`)
-                    write_code(`mov eax, [ebp - 20]`)
-                    write_code(`add eax, [ebp - 12]`)
-                    write_code(`add eax, [ebp - 16]`)
-                    write_code(`mov byte [eax], 0x0`)
+
+                    // write_code(`xor eax, eax`)
+                    // write_code(`sub esp, 4`)
+                    // write_code(`mov [ebp - 24], eax`)
+                    // write_code(`mov ebx, [ebp - 12]`)
+                    // write_code(`${l_loop_label}:`)
+                    // write_code(`mov eax, [ebp - 24]`)
+                    // write_code(`push eax`)
+                    // write_code(`push ebx`)
+                    // write_code(`mov eax, [ebp - 20]`)
+                    // write_code(`mov ebx, [ebp - 24]`)
+                    // write_code(`add eax, ebx`)
+                    // write_code(`push eax`)
+                    // write_code(`mov ebx, [ebp - 24]`)
+                    // write_code(`mov eax, [ebp - 4]`)
+                    // write_code(`add eax, ebx`)
+                    // write_code(`mov bl, byte [eax]`)
+                    // write_code(`pop eax`)
+                    // write_code(`mov byte [eax], bl`)
+                    // write_code(`pop ebx`)
+                    // write_code(`pop eax`)
+                    // write_code(`inc eax`)
+                    // write_code(`mov [ebp - 24], eax`)
+                    // write_code(`cmp eax, ebx`)
+                    // write_code(`jne ${l_loop_label}`)
+                    // write_code(`xor eax, eax`)
+                    // write_code(`mov [ebp - 24], eax`)
+                    // write_code(`mov ebx, [ebp - 16]`)
+                    // write_code(`${r_loop_label}:`)
+                    // write_code(`mov eax, [ebp - 24]`)
+                    // write_code(`push eax`)
+                    // write_code(`push ebx`)
+                    // write_code(`mov eax, [ebp - 20]`)
+                    // write_code(`mov ebx, [ebp - 24]`)
+                    // write_code(`add eax, ebx`)
+                    // write_code(`add eax, [ebp - 12]`)
+                    // write_code(`push eax`)
+                    // write_code(`mov ebx, [ebp - 24]`)
+                    // write_code(`mov eax, [ebp - 8]`)
+                    // write_code(`add eax, ebx`)
+                    // write_code(`mov bl, byte [eax]`)
+                    // write_code(`pop eax`)
+                    // write_code(`mov byte [eax], bl`)
+                    // write_code(`pop ebx`)
+                    // write_code(`pop eax`)
+                    // write_code(`inc eax`)
+                    // write_code(`mov [ebp - 24], eax`)
+                    // write_code(`cmp eax, ebx`)
+                    // write_code(`jne ${r_loop_label}`)
+                    // write_code(`mov eax, [ebp - 20]`)
+                    // write_code(`add eax, [ebp - 12]`)
+                    // write_code(`add eax, [ebp - 16]`)
+                    // write_code(`mov byte [eax], 0x0`)
 
                     // returns the pointer to the string in eax
                     // and also store the size of mapped data to ebx (for lazy free)
-                    write_code(`mov eax, [ebp - 20]`)
-                    write_code(`mov ebx, [ebp - 12]`)
-                    write_code(`add ebx, [ebp - 16]`)
+                    read_value({
+                        type: 'var',
+                        value: 'addr'
+                    }, world).write_all()
+                    write_code(`mov ecx, eax`)
+                    read_value({
+                        type: 'var',
+                        value: 'total_length'
+                    }, world).write_all()
+                    write_code(`mov ebx, eax`)
+                    write_code(`mov eax, ecx`)
                     write_code(`jmp ${data.label_ret_func}`)
                 }
             })
