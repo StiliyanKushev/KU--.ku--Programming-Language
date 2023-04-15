@@ -81,7 +81,7 @@ module.exports = tokens => {
             const location = tokens.save()
             if(!is_op('-') && !is_op('+')) return; const op = tokens.next()
             const expr = parse_datatypes() || parse_call()
-            if(!expr) return
+            if(!expr || ['bol','str'].includes(expr.type)) return
             return {
                 type: 'signed',
                 op: op,
@@ -437,7 +437,6 @@ module.exports = tokens => {
                 parse_binary() ||
                 parse_prefix() ||
                 parse_postfix() ||
-                parse_return() ||
                 parse_call() ||
                 parse_datatypes() || 
                 parse_signed() ||

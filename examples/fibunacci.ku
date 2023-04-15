@@ -1,71 +1,7 @@
-# :a/num = -69 + 420
-# :b/num = 420 / 2
-# :c/bol = false
-# :d/str = "Hello World!"
+print_user_data:/str {
+    get_name:/str { ret "Stiliyan" }
+    get_age:/num { ret 19 }
+    ret "name: " + @get_name + " age: " + @num2str @get_age
+}
 
-# :a/num = -2
-# :b/num = 4
-# :c/num = a + b
-
-# @outln @num2str c
-
-# :a/num = 1
-# a = 2
-
-# :a/num = 1
-# :b/num = ++a + a++ + a
-
-# @outln @num2str b
-
-# :d/num = 5
-
-# sum:/num a num, b num {
-#     :dd/num = 1
-#     inner_sum:/num {
-#         :c/num
-#         dd = 5
-#         inner_inner_sum:/num {
-#             c = a + b
-#             ret c * (d + dd)
-#         }
-#         ret @inner_inner_sum
-#     }
-#     ret @inner_sum
-# }
-
-# :a/num = 10
-# :myvar/num = @sum 1, 1 + ++a
-# :test/num = 5
-
-# :variable/num = 5
-
-# sum:/num a num {
-#     :c/num = -1
-#     inner:/num {
-#         c = 0
-#         ret a + variable++ + c 
-#     }
-#     ret @inner
-# }
-
-# :result/num = @sum 4
-
-# :test/num = 123
-
-# @outln @num2str result
-
-# :left/str :right/str
-# left = "Hello, "
-
-# print:/str { @out left + right @outln "" }
-
-# right = "World!"    (@print)
-# right = "From KU!"  (@print)
-
-# :text/str = "Hello and welcome to my language!"
-
-# @out text @out "\n"
-
-# @out text @out " -- length: " @outln @num2str @strlen text
-
-@outln @num2str 2
+@outln "Hello, " + @print_user_data

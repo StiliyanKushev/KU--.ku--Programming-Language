@@ -82,11 +82,10 @@ const types_offsets = {
     'str': 4, // hold address of string
 }
 
-// list of types that require their memory address
-// to be freed right before the scope dies.
-const types_should_be_freed = [
-    'str'
-]
+// unique global counters used as id's
+const counters = {
+    free_id: 0
+}
 
 // simple function to create a unique label name
 let _label_inc = 0, create_label = () => '__' + (++_label_inc).toFixed(10).replace('.', '_')
@@ -95,12 +94,41 @@ module.exports.generate_asm = ast => {
     console.dir(ast, { depth: null })
     console.log('-'.repeat(process.stdout.columns))
 
+    // list of types that require their memory address
+    // to be freed right before the scope dies.
+    // each one has a function that free's the data from eax.
+    // the size of the memory region to free depends on the
+    // data type and it's value.
+    const types_should_be_freed = new Map(Object.entries({
+        'str': (node, parent) => {
+            // free length of string
+            write_code(';; free str')
+            write_code('mov ebx, eax')
+            read_call_function({
+                name: 'strlen',
+                args: [{
+                    type: 'override',
+                    override: {
+                        write_all: () => {}
+                    },
+                }],
+            }, parent).write_all()
+            write_code('push ecx')
+            write_code('mov ecx, eax')
+            write_code('mov eax, ebx')
+            write_code('mov ebx, ecx')
+            write_code('pop ecx')
+            write_code(';; end free str')
+        },
+        // todo: add custom structs as types here?
+    }))
+ 
     // general function that will keep track of eax
     // address and lazily adds it to a cache. the scope
     // then goes through that cache and frees all entries.
     // note: this function expects the address to be at eax
     // note: this function expects the size/length to be at ebx
-    const lazy_free = (context) => {
+    const lazy_free = (context, unique_id) => {
         write_code(`;; -- lazy_free -- ;;`)
         const addr_offset = context.var_offset += 4
         const size_offset = context.var_offset += 4
@@ -108,14 +136,17 @@ module.exports.generate_asm = ast => {
         write_code(`mov [ebp - ${addr_offset}], eax`)
         write_code(`sub esp, 4`)
         write_code(`mov [ebp - ${size_offset}], ebx`)
-        context.free_set.add([addr_offset, size_offset])
+        context.free_set.set(unique_id, [addr_offset, size_offset])
     }
 
     // this function will typically run at the end of a scope.
     // it will loop the free_set set and "free" each of the stored entries.
     const free_set_context = (context) => {
         write_code(`;; -- free_set_context -- ;;`)
-        for(let [ addr_offset, size_offset ] of context.free_set) {
+        write_code(`push eax`)
+        write_code(`push ebx`)
+        const sets = Object.values(Object.fromEntries(context.free_set))
+        for(let [ addr_offset, size_offset ] of sets) {
             write_code(`mov eax, [ebp - ${addr_offset}]`)
             write_code(`mov ebx, [ebp - ${size_offset}]`)
             write_code(`mov ecx, ebx`)
@@ -124,6 +155,8 @@ module.exports.generate_asm = ast => {
             write_code(`mov edx, 0`)
             write_code(`int 0x80`)
         }
+        write_code(`pop ebx`)
+        write_code(`pop eax`)
     }
 
     // universal function for preparing context of a scope
@@ -132,7 +165,7 @@ module.exports.generate_asm = ast => {
         variables: new Map(), // map variable name to offset of ebp for parent's scope
         functions: new Map(), // map function name to function label
         var_offset: 0,        // incremented offset for each new local variable on stack
-        free_set: new Set(),  // set contains [addr_offset, size_offset] elements
+        free_set: new Map(),  // map unique key to set that contains [addr_offset, size_offset] elements
     })
 
     const util_string_to_hex_arr = (string) => {
@@ -346,6 +379,7 @@ module.exports.generate_asm = ast => {
             return {
                 type: found_var.value.type,
                 name: var_name,
+                free_id: found_var.value.free_id, // can be undefined
                 write_all: () => {
                     write_code(`;; var val ${var_name}`)
                     execute_in_above_scope(() => {
@@ -381,6 +415,7 @@ module.exports.generate_asm = ast => {
         let args       = node.vars
 
         const label_start_func  = `__${name}__begin` + create_label()
+        const label_end_func    = `__${name}__skip` + create_label()
         const label_ret_func    = `__${name}__ret` + create_label()
 
         let data = {
@@ -403,6 +438,7 @@ module.exports.generate_asm = ast => {
             write_all: () => {
                 let old_write_code = write_code
                 write_code = write_in_function
+                write_code(`jmp ${label_end_func}`)
                 write_code(`${label_start_func}:`)
                 write_code(`push ebp`)
                 write_code(`mov ebp, esp`)
@@ -443,6 +479,7 @@ module.exports.generate_asm = ast => {
                 write_code(`mov esp, ebp`)
                 write_code(`pop ebp`)
                 write_code(`ret`)
+                write_code(`${label_end_func}:`)
                 write_code = old_write_code
             }
         }
@@ -460,11 +497,34 @@ module.exports.generate_asm = ast => {
             throw_function_invalid_arguments_count(node, parent)
         }
 
+        let free_id = undefined
+
+        if(types_should_be_freed.has(ret_type)) {
+            // create a unique key
+            // that can be linked to the entry in the free set
+            // then return that unique key in the below return
+            // so that after that we check that in the read_ret
+            // and remove it from the free_set (as it's returned)
+            // also, handle variables.
+            free_id = node.opt_free_id || counters.free_id++
+        }
+
         return {
             type: ret_type,
             name: name,
             ret_size: ret_size,
+            free_id: free_id,
             write_all: () => {
+                let ebx_store_offset = null
+                if(types_should_be_freed.has(ret_type)) {
+                    // value is a pointer to a type that should be freed
+                    // as the memory at the said pointer is mapped to the heap.
+                    // this means the called function will store the length at ebx,
+                    // so we have to store/restore it after the function call.
+                    ebx_store_offset = parent.context.var_offset += 4
+                    write_code(`push ebx`)
+                }
+                
                 // note: Pretty much the same reason as in read_binary,
                 // note: we can't really push eax and expect the stack
                 // note: not to change in between com_value.write_all
@@ -474,7 +534,6 @@ module.exports.generate_asm = ast => {
                 // note: to the function. That's why we have to store them
                 // note: in the local stack frame temporarily, then push
                 // note: them in the correct order, and clear them afterwards.
-                // todo: 
                 let scattered_args = []
 
                 func_args.reverse().map((func_arg, ri) => {
@@ -502,10 +561,13 @@ module.exports.generate_asm = ast => {
                 parent.context.var_offset -= 4 * func_args.length
                 write_code(`add esp, 4 * ${func_args.length}`)
 
-                if(types_should_be_freed.includes(ret_type)) {
+                if(types_should_be_freed.has(ret_type)) {
+                    // calculate size to unmap
+                    types_should_be_freed.get(ret_type)(node, parent)
                     // value is a pointer to a type that should be freed
                     // as the memory at the said pointer is mapped to the heap.
-                    lazy_free(parent.context)
+                    lazy_free(parent.context, free_id)
+                    write_code(`mov ebx, [ebp - ${ebx_store_offset}]`)
                 }
             }
         }
@@ -532,6 +594,16 @@ module.exports.generate_asm = ast => {
             write_all: () => {
                 const com_value = read_value(node.value, parent, ret_type)
                 com_value.write_all()
+
+                // we might want to exclude the return value
+                // from the free set, if the return value is
+                // there.
+                if(parent.context.free_set.has(com_value.free_id)) {
+                    parent.context.free_set.delete(com_value.free_id)
+                }
+
+                // scope will die now. free any mapped data from it.
+                free_set_context(parent.context)
                 write_code(`jmp ${label_ret_func}`)
             }
         }
@@ -637,6 +709,21 @@ module.exports.generate_asm = ast => {
             req_type = ['num', 'bol']
         }
 
+        // we may or may not need a predefined
+        // free id if ever one of the binary operations
+        // calls a function that needs to be freed.
+        // ex: string appending
+        // note: without this, the call will still be 
+        // note: added to the free set, but the returned
+        // note: binary value will not have the free id
+        // note: and we'll not be able to remove it from 
+        // note: the free set if ever we have to return that.
+        let opt_free_id = undefined
+
+        if(node.operator == '+' && type == 'str') {
+            opt_free_id = counters.free_id++
+        }
+
         const write_all = () => {
             write_code(`;; --- read binary --- ;;`)
             write_code(`push ebx`)
@@ -680,6 +767,7 @@ module.exports.generate_asm = ast => {
                                 }
                             }
                         }].reverse(),
+                        opt_free_id: opt_free_id
                     }, parent).write_all()
                 } else {
                     throw_unsupported_operation(node, parent)
@@ -816,6 +904,7 @@ module.exports.generate_asm = ast => {
 
         return {
             type: type,
+            free_id: opt_free_id,
             write_all: write_all
         }
     }
@@ -836,7 +925,8 @@ module.exports.generate_asm = ast => {
                 write_all: () => {
                     let com_value  = read_value(node.value, parent, type)
                     parent.context.variables.set(node.name, {
-                        name, type, type_size, offset
+                        name, type, type_size, offset,
+                        free_id: com_value.free_id
                     })
         
                     write_code(`;; --- declare "${name}" [${type}] (${offset}) --- ;;`)
@@ -1285,59 +1375,6 @@ module.exports.generate_asm = ast => {
                     write_code(`cmp ebx, eax`)
                     write_code(`jne ${r_loop_label}`)
 
-                    // write_code(`xor eax, eax`)
-                    // write_code(`sub esp, 4`)
-                    // write_code(`mov [ebp - 24], eax`)
-                    // write_code(`mov ebx, [ebp - 12]`)
-                    // write_code(`${l_loop_label}:`)
-                    // write_code(`mov eax, [ebp - 24]`)
-                    // write_code(`push eax`)
-                    // write_code(`push ebx`)
-                    // write_code(`mov eax, [ebp - 20]`)
-                    // write_code(`mov ebx, [ebp - 24]`)
-                    // write_code(`add eax, ebx`)
-                    // write_code(`push eax`)
-                    // write_code(`mov ebx, [ebp - 24]`)
-                    // write_code(`mov eax, [ebp - 4]`)
-                    // write_code(`add eax, ebx`)
-                    // write_code(`mov bl, byte [eax]`)
-                    // write_code(`pop eax`)
-                    // write_code(`mov byte [eax], bl`)
-                    // write_code(`pop ebx`)
-                    // write_code(`pop eax`)
-                    // write_code(`inc eax`)
-                    // write_code(`mov [ebp - 24], eax`)
-                    // write_code(`cmp eax, ebx`)
-                    // write_code(`jne ${l_loop_label}`)
-                    // write_code(`xor eax, eax`)
-                    // write_code(`mov [ebp - 24], eax`)
-                    // write_code(`mov ebx, [ebp - 16]`)
-                    // write_code(`${r_loop_label}:`)
-                    // write_code(`mov eax, [ebp - 24]`)
-                    // write_code(`push eax`)
-                    // write_code(`push ebx`)
-                    // write_code(`mov eax, [ebp - 20]`)
-                    // write_code(`mov ebx, [ebp - 24]`)
-                    // write_code(`add eax, ebx`)
-                    // write_code(`add eax, [ebp - 12]`)
-                    // write_code(`push eax`)
-                    // write_code(`mov ebx, [ebp - 24]`)
-                    // write_code(`mov eax, [ebp - 8]`)
-                    // write_code(`add eax, ebx`)
-                    // write_code(`mov bl, byte [eax]`)
-                    // write_code(`pop eax`)
-                    // write_code(`mov byte [eax], bl`)
-                    // write_code(`pop ebx`)
-                    // write_code(`pop eax`)
-                    // write_code(`inc eax`)
-                    // write_code(`mov [ebp - 24], eax`)
-                    // write_code(`cmp eax, ebx`)
-                    // write_code(`jne ${r_loop_label}`)
-                    // write_code(`mov eax, [ebp - 20]`)
-                    // write_code(`add eax, [ebp - 12]`)
-                    // write_code(`add eax, [ebp - 16]`)
-                    // write_code(`mov byte [eax], 0x0`)
-
                     // returns the pointer to the string in eax
                     // and also store the size of mapped data to ebx (for lazy free)
                     read_value({
@@ -1520,10 +1557,7 @@ module.exports.generate_asm = ast => {
                     write_code(`jne ${fill_loop}`)
 
                     // returns the pointer to the string in eax
-                    // and also store the size of mapped data to ebx (for lazy free)
                     write_code(`mov eax, [ebp - 12]`)
-                    write_code(`mov ebx, [ebp - 8]`)
-                    write_code(`inc ebx`) // null terminator
                     write_code(`jmp ${data.label_ret_func}`)
                 }
             })
