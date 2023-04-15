@@ -1,7 +1,9 @@
-print_user_data:/str {
-    get_name:/str { ret "Stiliyan" }
-    get_age:/num { ret 19 }
-    ret "name: " + @get_name + " age: " + @num2str @get_age
-}
+:var/bol = true
 
-@outln "Hello, " + @print_user_data
+if var {
+    @outln "1"
+} else if true {
+    @outln "2"
+} else {
+    @outln "3"
+}

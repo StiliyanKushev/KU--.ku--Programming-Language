@@ -958,7 +958,58 @@ module.exports.generate_asm = ast => {
     }
 
     const read_if = (node, parent) => {
-        // todo: implement
+        const expr = read_value(node.statement, parent)
+        if(expr.type != 'bol') {
+            throw_statement_not_boolean(node, parent)
+        }
+
+        return {
+            write_all: () => {
+                // load the value to eax
+                expr.write_all()
+
+                const else_label = create_label()
+                const exit_label = create_label()
+
+                write_code(`cmp eax, 1`)
+                write_code(`jne ${else_label}`)
+                
+                const world_if = {
+                    parent: parent,
+                    context: create_context(),
+                }
+
+                write_code(`push ebp`)
+                write_code(`mov ebp, esp`)
+                read_scope(node.body.prog, world_if.parent, world_if.context)
+                write_code(`mov esp, ebp`)
+                write_code(`pop ebp`)
+
+                write_code(`jmp ${exit_label}`)
+                write_code(`${else_label}:`)
+                
+                const world_else = {
+                    parent: parent,
+                    context: create_context(),
+                }
+
+                if(node.else.type == 'else') {
+                    write_code(`push ebp`)
+                    write_code(`mov ebp, esp`)
+                    read_scope(
+                        node.else.body.prog, 
+                        world_else.parent, 
+                        world_else.context)
+                    write_code(`mov esp, ebp`)
+                    write_code(`pop ebp`)
+                } else if(node.else.type == 'if') {
+                    read_if(node.else, parent).write_all()
+                }
+
+                write_code(`jmp ${exit_label}`)
+                write_code(`${exit_label}:`)
+            }
+        }
     }
 
     const read_for = (node, parent) => {
@@ -1057,8 +1108,7 @@ module.exports.generate_asm = ast => {
             } else if(node.type == 'call') {
                 read_call_function(node, world).write_all()
             } else if(node.type == 'if') {
-                // read_if(node, world)
-                throw_not_implemented(node, world)
+                read_if(node, world).write_all()
             } else if(node.type == 'for') {
                 // read_for(node, world)
                 throw_not_implemented(node, world)
