@@ -290,18 +290,38 @@ module.exports.generate_asm = ast => {
             lookup_index + 1)
     }
 
-    const lookup_function = (node, parent, name) => {
+    const lookup_function = (node, parent, name, lookup_index = 0) => {
         if(!parent) throw_function_not_exist(node, parent)
-        if(parent.context.functions.has(name)) {
+        if(!name) {
+            // we're only looking for the closest scope above
+            // that is a function.
+            if(parent.context.func_self) {
+                return {
+                    parent: parent,
+                    lookup_index: lookup_index
+                }
+            }
+        }
+        else if(parent.context.functions.has(name)) {
             const value = parent.context.functions.get(name)
             return {
                 parent: parent,
                 value: value,
+                lookup_index: lookup_index
             }
         }
 
         return lookup_function(
-            node, parent.parent, name)
+            node, parent.parent, name, lookup_index + 1)
+    }
+
+    const execute_in_above_scope_context = (parent, func, above_scope_index) => {
+        let curr = parent
+        for(let lookup_index = 1; lookup_index <= above_scope_index; lookup_index++) {
+            if(!curr) break
+            curr = curr.parent
+        }
+        func(curr)
     }
 
     const execute_in_above_scope = (func, above_scope_index) => {
@@ -458,7 +478,8 @@ module.exports.generate_asm = ast => {
                                     // we skip the saved 'ebp'.
                                     // we skip the pushed by 'call' ip.
                                     // we skip each previous argument.
-                                    write_code(`mov eax, [ebp + 8 + ${(i * 4) + 4}]`)
+                                    write_code(`mov eax, [ebp + 8 + ${i * 4}]`)
+                                    // write_code(`mov eax, [ebp + 8 + ${(i * 4) + 4}]`)
                                 }
                             }
                         },
@@ -506,7 +527,9 @@ module.exports.generate_asm = ast => {
             // so that after that we check that in the read_ret
             // and remove it from the free_set (as it's returned)
             // also, handle variables.
-            free_id = node.opt_free_id || counters.free_id++
+            free_id = typeof node.opt_free_id != 'undefined'
+                ? node.opt_free_id
+                : counters.free_id++
         }
 
         return {
@@ -574,9 +597,13 @@ module.exports.generate_asm = ast => {
     }
 
     const read_ret = (node, parent) => {
-        const label_ret_func    = parent.context.func_self.label_ret_func
-        const ret_type          = parent.context.func_self.ret_type
+        const found_func = lookup_function(node, parent)
 
+        const lookup_index      = found_func.lookup_index
+        const label_ret_func    = found_func.parent.context.func_self.label_ret_func
+        const ret_type          = found_func.parent.context.func_self.ret_type
+
+        // todo: below logic for empty ret
         // empty ret, return default value
         if(!node.value) {
             return {
@@ -595,15 +622,53 @@ module.exports.generate_asm = ast => {
                 const com_value = read_value(node.value, parent, ret_type)
                 com_value.write_all()
 
-                // we might want to exclude the return value
-                // from the free set, if the return value is
-                // there.
-                if(parent.context.free_set.has(com_value.free_id)) {
-                    parent.context.free_set.delete(com_value.free_id)
+                // loop each scope up until the first function scope
+                // that we will return the value of. for each scope,
+                // check if com_value is in the free set, and remove it.
+                // after that for each scope execute the free_set_context
+                // and then jmp to the label_ret_func.
+                // the label_ret_func has to be of the first function,
+                // not nessesarily the current scope.
+                for(let i = 0; i <= lookup_index; i++) {
+                    execute_in_above_scope_context(parent, t_parent => {
+                        // we want to exclude the return value
+                        // from the free set, if the return value is
+                        // there.
+                        let temp_val = undefined
+                        if(t_parent.context.free_set.has(
+                            com_value.free_id)) {
+                            temp_val = t_parent.context.free_set.get(
+                                com_value.free_id)
+                            t_parent.context.free_set.delete(
+                                com_value.free_id)
+                        }
+
+                        execute_in_above_scope(() => {
+                            // scope will die now. free any mapped data from it.
+                            free_set_context(t_parent.context)
+                        }, i)
+
+                        // if the "ret" is inside of a nested scope
+                        // we want to bring it back after we've successfully
+                        // written out the correct free_set_context
+                        // That's because in case we don't hit this "ret"
+                        // in-code, we should not have removed it from the
+                        // free set.
+                        if(i > 0 && temp_val) {
+                            t_parent.context.free_set.set(
+                                com_value.free_id, temp_val)
+                        }
+                    }, i)
                 }
 
-                // scope will die now. free any mapped data from it.
-                free_set_context(parent.context)
+                // if the current scope is nested condition
+                // or loop, we want to leave the frame stack
+                // before we return
+                if(!parent.context.func_self) {
+                    write_code(`mov esp, ebp`)
+                    write_code(`pop ebp`)
+                }
+
                 write_code(`jmp ${label_ret_func}`)
             }
         }
@@ -993,7 +1058,7 @@ module.exports.generate_asm = ast => {
                     context: create_context(),
                 }
 
-                if(node.else.type == 'else') {
+                if(node.else?.type == 'else') {
                     write_code(`push ebp`)
                     write_code(`mov ebp, esp`)
                     read_scope(
@@ -1002,7 +1067,7 @@ module.exports.generate_asm = ast => {
                         world_else.context)
                     write_code(`mov esp, ebp`)
                     write_code(`pop ebp`)
-                } else if(node.else.type == 'if') {
+                } else if(node.else?.type == 'if') {
                     read_if(node.else, parent).write_all()
                 }
 
@@ -1177,7 +1242,7 @@ module.exports.generate_asm = ast => {
                 name,
                 ret_type: { value: ret_type },
                 internal_code: write_internal,
-                vars: args.reverse()
+                vars: args
             }, this)
             func_def.write_all()
             return func_def

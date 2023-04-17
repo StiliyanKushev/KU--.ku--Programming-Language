@@ -1,9 +1,13 @@
-:var/bol = true
+get_user_data:/str first_name str, last_name str {
+    get_name:/str {
+        ret first_name + " " + last_name
+    }
+    get_age:/num {
+        ret 19
+    }
 
-if var {
-    @outln "1"
-} else if true {
-    @outln "2"
-} else {
-    @outln "3"
+    ret "Name: " + @get_name + " Age: " + @num2str @get_age
 }
+
+:user_data/str = @get_user_data "Stiliyan", "Kushev"
+@outln user_data

@@ -602,12 +602,19 @@ module.exports.simulate_ast = ast => {
     }
 
     const read_ret = (node, parent) => {
-        const ret_type = read_type(parent.context.flags.get('ret_type'))
+        const found_func = lookup_flag(node, parent, 'ret_type').parent
+        const found_type = found_func.context.flags.get('ret_type')
+        const ret_type = read_type(found_type)
+        
+        let ret_value
         if(node.value) {
-            return read_value(node.value, parent, ret_type)
+            ret_value = read_value(node.value, parent, ret_type)
         } else {
-            return type_default_value(ret_type)
+            ret_value = type_default_value(ret_type)
         }
+
+        found_func.context.flags.set('ret_value', ret_value)
+        return ret_value
     }
 
     const read_break = (node, parent) => {
@@ -626,6 +633,9 @@ module.exports.simulate_ast = ast => {
 
         for(let node of prog) {
             if(world.context.flags.has('continue')) break
+            if(world.context.flags.has('ret_value')) {
+                return world.context.flags.get('ret_value')
+            }
 
             if(node.type == 'func') {
                 read_func(node, world)
