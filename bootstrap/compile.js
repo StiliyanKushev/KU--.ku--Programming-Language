@@ -545,7 +545,7 @@ module.exports.generate_asm = ast => {
                     // this means the called function will store the length at ebx,
                     // so we have to store/restore it after the function call.
                     ebx_store_offset = parent.context.var_offset += 4
-                    write_code(`push ebx`)
+                    write_code(`push ebx ;; ${parent.context.var_offset}`)
                 }
                 
                 // note: Pretty much the same reason as in read_binary,
@@ -791,7 +791,7 @@ module.exports.generate_asm = ast => {
 
         const write_all = () => {
             write_code(`;; --- read binary --- ;;`)
-            write_code(`push ebx`)
+            write_code(`push ebx ;; ${parent.context.var_offset + 4}`)
             const pre_binary_read_var_offset = parent.context.var_offset += 4
 
             // ex: false > false
@@ -964,7 +964,6 @@ module.exports.generate_asm = ast => {
             const post_binary_read_var_offset = parent.context.var_offset
             const stack_shift = post_binary_read_var_offset - pre_binary_read_var_offset
             write_code(`mov ebx, [esp + ${stack_shift}]`)
-            // write_code(`pop ebx`)
         }
 
         return {
@@ -1082,7 +1081,42 @@ module.exports.generate_asm = ast => {
     }
 
     const read_while = (node, parent) => {
-        // todo: implement
+        const loop_label = create_label()
+        const exit_label = create_label()
+
+        return {
+            exit_label: exit_label,
+            write_all: () => {
+                write_code(`${loop_label}:`)
+                        
+                const world = {
+                    parent: parent,
+                    context: create_context(),
+                }
+
+                write_code(`push ebp`)
+                write_code(`mov ebp, esp`)
+                
+                const expr = read_value(node.statement, world)
+                if(expr.type != 'bol') {
+                    throw_statement_not_boolean(node, parent)
+                }
+                // load the value to eax
+                expr.write_all()
+
+                write_code(`cmp eax, 1`)
+                write_code(`jne ${exit_label}`)
+                
+                read_scope(node.body.prog, world.parent, world.context)
+                write_code(`mov esp, ebp`)
+                write_code(`pop ebp`)
+
+                write_code(`jmp ${loop_label}`)
+                write_code(`${exit_label}:`)
+                write_code(`mov esp, ebp`)
+                write_code(`pop ebp`)
+            }
+        }
     }
 
     const read_postfix = (node, parent) => {
@@ -1178,8 +1212,7 @@ module.exports.generate_asm = ast => {
                 // read_for(node, world)
                 throw_not_implemented(node, world)
             } else if(node.type == 'while') {
-                // read_while(node, world)
-                throw_not_implemented(node, world)
+                read_while(node, world).write_all()
             } else if(node.type == 'postfix') {
                 read_postfix(node, world).write_all()
             } else if(node.type == 'prefix') {

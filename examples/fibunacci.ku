@@ -1,13 +1,7 @@
-get_user_data:/str first_name str, last_name str {
-    get_name:/str {
-        ret first_name + " " + last_name
-    }
-    get_age:/num {
-        ret 19
-    }
+:count/num = 0
 
-    ret "Name: " + @get_name + " Age: " + @num2str @get_age
+while count < 1000000000 {
+    count++
 }
 
-:user_data/str = @get_user_data "Stiliyan", "Kushev"
-@outln user_data
+@outln @num2str count
