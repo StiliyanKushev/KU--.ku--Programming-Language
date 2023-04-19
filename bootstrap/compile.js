@@ -663,8 +663,9 @@ module.exports.generate_asm = ast => {
 
                 // if the current scope is nested condition
                 // or loop, we want to leave the frame stack
-                // before we return
-                if(!parent.context.func_self) {
+                // before we return.
+                // note: we want to do that for every nested scope.
+                for(let i = 0; i < lookup_index; i++) {
                     write_code(`mov esp, ebp`)
                     write_code(`pop ebp`)
                 }
@@ -1010,6 +1011,9 @@ module.exports.generate_asm = ast => {
                 name, type, offset,
                 write_all: () => {
                     const new_value = read_value(node.value, parent, type)
+                    // update the free id in-case the new assigned value is to be lazy
+                    // freed later on
+                    found_var.parent.context.variables.get(node.name).free_id = new_value.free_id
                     write_code(`;; --- assign "${name}" [${type}] (${offset}) --- ;;`)
                     new_value.write_all()
 
