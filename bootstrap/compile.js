@@ -143,9 +143,10 @@ module.exports.generate_asm = ast => {
     // it will loop the free_set set and "free" each of the stored entries.
     const free_set_context = (context) => {
         write_code(`;; -- free_set_context -- ;;`)
+        const sets = Object.values(Object.fromEntries(context.free_set))
+        if(sets.length == 0) return
         write_code(`push eax`)
         write_code(`push ebx`)
-        const sets = Object.values(Object.fromEntries(context.free_set))
         for(let [ addr_offset, size_offset ] of sets) {
             write_code(`mov eax, [ebp - ${addr_offset}]`)
             write_code(`mov ebx, [ebp - ${size_offset}]`)
@@ -177,6 +178,16 @@ module.exports.generate_asm = ast => {
         }
         arr.push('0x0')
         return arr
+    }
+
+    const hardcoded_strings = new Map()
+
+    const get_cached_hardcoded_string = (hex) => {
+        return hardcoded_strings.get(hex)
+    }
+
+    const set_cached_hardcoded_string = (label, hex) => {
+        hardcoded_strings.set(hex, label)
     }
 
     const throw_fatal_error = (error, node, parent) => {
@@ -265,10 +276,19 @@ module.exports.generate_asm = ast => {
             `not implemented -> ${node.type}`, node, parent)
     }
 
-    const type_default_value = (value_type) => {
-        if(value_type == 'num') return 0
-        if(value_type == 'bol') return 0
-        if(value_type == 'str') return 0
+    const type_default_value = (parent, value_type) => {
+        if(value_type == 'num') return read_value({
+            type: 'num',
+            value: 0
+        }, parent, value_type)
+        if(value_type == 'bol') return read_value({
+            type: 'bol',
+            value: false
+        }, parent, value_type)
+        if(value_type == 'str') return read_value({
+            type: 'str',
+            value: ''
+        }, parent, value_type)
     }
 
     const lookup_variable = (node, parent, name, lookup_index = 0) => {
@@ -369,13 +389,19 @@ module.exports.generate_asm = ast => {
             }
         } else if(node.type == 'str') {
             check_value_type(node.type)
-            let string_label = create_label()
             let string_hex = util_string_to_hex_arr(node.value).join(', ')
+            let cached_label = get_cached_hardcoded_string(string_hex)
+            let string_label = cached_label || create_label()
+            if(!cached_label) {
+                set_cached_hardcoded_string(string_label, string_hex)
+            }
             return {
                 type: node.type,
                 write_all: () => {
                     write_code(`;; str`)
-                    write_data(`${string_label}: db ${string_hex}`)
+                    if(!cached_label) {
+                        write_data(`${string_label}: db ${string_hex}`)
+                    }
                     write_code(`mov eax, ${string_label}`)
                 }
             }
@@ -603,23 +629,17 @@ module.exports.generate_asm = ast => {
         const label_ret_func    = found_func.parent.context.func_self.label_ret_func
         const ret_type          = found_func.parent.context.func_self.ret_type
 
-        // todo: below logic for empty ret
-        // empty ret, return default value
-        if(!node.value) {
-            return {
-                type: ret_type,
-                write_all: () => {
-                    write_code(`mov eax, ${type_default_value(ret_type)}`)
-                    write_code(`jmp ${label_ret_func}`)
-                }
-            }
-        }
-
         return {
             type: ret_type,
             ret_type: ret_type,
             write_all: () => {
-                const com_value = read_value(node.value, parent, ret_type)
+                let com_value
+
+                if(!node.value) {
+                    com_value = type_default_value(parent, ret_type)
+                } else {
+                    com_value = read_value(node.value, parent, ret_type)
+                }
                 com_value.write_all()
 
                 // loop each scope up until the first function scope
@@ -1460,7 +1480,7 @@ module.exports.generate_asm = ast => {
                         value: 'l_length'
                     }, world).write_all()
                     write_code(`cmp ebx, eax`)
-                    write_code(`jne ${l_loop_label}`)
+                    write_code(`jl ${l_loop_label}`)
 
                     read_var({
                         mode: 'assign',
@@ -1525,7 +1545,7 @@ module.exports.generate_asm = ast => {
                         value: 'r_length'
                     }, world).write_all()
                     write_code(`cmp ebx, eax`)
-                    write_code(`jne ${r_loop_label}`)
+                    write_code(`jl ${r_loop_label}`)
 
                     // returns the pointer to the string in eax
                     // and also store the size of mapped data to ebx (for lazy free)
