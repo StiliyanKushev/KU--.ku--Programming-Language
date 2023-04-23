@@ -9,12 +9,14 @@ const create_context = () => ({
     functions: new Map(),
     flags: new Map()
 })
-
 // built in "core" variables and functions go here
 const core_sim = new class {
     constructor() {
         this.parent = undefined
         this.context = create_context()
+
+        this.context.functions.set("strapnd", this.strapnd)
+        this.context.functions.set("strlen", this.strlen)
 
         // stdio 
         this.context.functions.set("out", this.out)
@@ -32,17 +34,17 @@ const core_sim = new class {
             type: 'func',
             vars: vars,
             name: name,
-            body: { 
-                type: 'prog', 
+            body: {
+                type: 'prog',
                 prog: [{
                     type: 'internal',
                     code: '(' + code_func + ')()',
-                }] 
+                }]
             },
-            location: { 
-                pos: 'internal', 
-                line: 'internal', 
-                col: 'internal' 
+            location: {
+                pos: 'internal',
+                line: 'internal',
+                col: 'internal'
             },
             ret_type: {
                 type: 'kw',
@@ -55,15 +57,15 @@ const core_sim = new class {
         return {
             type: 'var',
             value: name,
-            location: { 
-                pos: 'internal', 
-                line: 'internal', 
-                col: 'internal' 
+            location: {
+                pos: 'internal',
+                line: 'internal',
+                col: 'internal'
             },
             arg_type: {
                 type: 'kw',
                 value: type
-            } 
+            }
         }
     }
 
@@ -71,7 +73,7 @@ const core_sim = new class {
     get out() {
         return this.make_f({
             name: 'out',
-            vars: [ this.make_arg('data', 'str') ],
+            vars: [this.make_arg('data', 'str')],
             code_func: function () {
                 const data = '' + this.context.variables.get('data')
                 process.stdout.write(typeof data == 'undefined' ? '' : data)
@@ -85,21 +87,21 @@ const core_sim = new class {
     get outln() {
         return this.make_f({
             name: 'outln',
-            vars: [ this.make_arg('data', 'str') ],
+            vars: [this.make_arg('data', 'str')],
             code_func: function () {
-               const data = '' + this.context.variables.get('data')
-               process.stdout.write(typeof data == 'undefined' ? '\n' : data + '\n')
-               return true
+                const data = '' + this.context.variables.get('data')
+                process.stdout.write(typeof data == 'undefined' ? '\n' : data + '\n')
+                return true
             },
             ret_type: 'bol'
         })
-   }
+    }
 
-   // converts boolean value to string
-   get bol2str() {
+    // converts boolean value to string
+    get bol2str() {
         return this.make_f({
             name: 'out',
-            vars: [ this.make_arg('data', 'bol') ],
+            vars: [this.make_arg('data', 'bol')],
             code_func: function () {
                 const data = this.context.variables.get('data')
                 return '' + data
@@ -107,12 +109,12 @@ const core_sim = new class {
             ret_type: 'str'
         })
     }
-    
+
     // converts number value to string
     get num2str() {
         return this.make_f({
             name: 'out',
-            vars: [ this.make_arg('data', 'num') ],
+            vars: [this.make_arg('data', 'num')],
             code_func: function () {
                 const data = this.context.variables.get('data')
                 return '' + data
@@ -125,7 +127,7 @@ const core_sim = new class {
     get str2num() {
         return this.make_f({
             name: 'out',
-            vars: [ this.make_arg('data', 'str') ],
+            vars: [this.make_arg('data', 'str')],
             code_func: function () {
                 const data = this.context.variables.get('data')
                 return Number(data)
@@ -133,16 +135,16 @@ const core_sim = new class {
             },
             ret_type: 'num'
         })
-   }
-   
-   // converts string value to boolean
-   get str2bol() {
+    }
+
+    // converts string value to boolean
+    get str2bol() {
         return this.make_f({
             name: 'out',
-            vars: [ this.make_arg('data', 'str') ],
+            vars: [this.make_arg('data', 'str')],
             code_func: function () {
                 const data = this.context.variables.get('data')
-                if(data.toLowerCase().trim() == 'true') {
+                if (data.toLowerCase().trim() == 'true') {
                     return true
                 } else {
                     return false
@@ -151,7 +153,38 @@ const core_sim = new class {
             },
             ret_type: 'bol'
         })
-   }
+    }
+
+    // returns length of a given string
+    get strlen() {
+        return this.make_f({
+            name: 'strlen',
+            vars: [this.make_arg('data', 'str')],
+            code_func: function () {
+                const data = this.context.variables.get('data')
+                if (data.length) {
+                    return data.length
+                } else {
+                    return -1
+                }
+            },
+            ret_type: 'num'
+        })
+    }
+
+    // appends two strings together and returns the result
+    get strapnd() {
+        return this.make_f({
+            name: 'strapnd',
+            vars: [this.make_arg('l', 'str'), this.make_arg('r', 'str')],
+            code_func: function () {
+                const l = this.context.variables.get('l')
+                const r = this.context.variables.get('r')
+                return l + r
+            },
+            ret_type: 'str'
+        })
+    }
 }
 
 // only used to execute internal code from "core"
@@ -163,7 +196,7 @@ const exec_internal = (node, parent) => {
     })
     const result = vm.runInNewContext(node.code, vm_context)
     return result
-}   
+}
 
 module.exports.simulate_ast = ast => {
     console.dir(ast, { depth: null })
@@ -569,12 +602,19 @@ module.exports.simulate_ast = ast => {
     }
 
     const read_ret = (node, parent) => {
-        const ret_type = read_type(parent.context.flags.get('ret_type'))
+        const found_func = lookup_flag(node, parent, 'ret_type').parent
+        const found_type = found_func.context.flags.get('ret_type')
+        const ret_type = read_type(found_type)
+        
+        let ret_value
         if(node.value) {
-            return read_value(node.value, parent, ret_type)
+            ret_value = read_value(node.value, parent, ret_type)
         } else {
-            return type_default_value(ret_type)
+            ret_value = type_default_value(ret_type)
         }
+
+        found_func.context.flags.set('ret_value', ret_value)
+        return ret_value
     }
 
     const read_break = (node, parent) => {
@@ -593,6 +633,9 @@ module.exports.simulate_ast = ast => {
 
         for(let node of prog) {
             if(world.context.flags.has('continue')) break
+            if(world.context.flags.has('ret_value')) {
+                return world.context.flags.get('ret_value')
+            }
 
             if(node.type == 'func') {
                 read_func(node, world)

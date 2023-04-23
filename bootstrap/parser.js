@@ -59,7 +59,6 @@ module.exports = tokens => {
         return arr
     }
 
-    // parsing functions
     const parse_datatypes = (tok, allowVar = true) => {
         return parse_handler(reject => {
             const current = tok || tokens.next()
@@ -81,7 +80,7 @@ module.exports = tokens => {
             const location = tokens.save()
             if(!is_op('-') && !is_op('+')) return; const op = tokens.next()
             const expr = parse_datatypes() || parse_call()
-            if(!expr) return
+            if(!expr || ['bol','str'].includes(expr.type)) return
             return {
                 type: 'signed',
                 op: op,
@@ -154,8 +153,7 @@ module.exports = tokens => {
                         parse_prefix() || 
                         parse_postfix() || 
                         parse_datatypes() ||
-                        parse_signed() || 
-                        parse_typeof()
+                        parse_signed()
                 if(!left)       return 
                 if(!is_op())    return
             }
@@ -177,8 +175,7 @@ module.exports = tokens => {
                     parse_prefix() || 
                     parse_postfix() || 
                     parse_datatypes() || 
-                    parse_signed() ||
-                    parse_typeof(), PRECEDENCE[op]),
+                    parse_signed(), PRECEDENCE[op]),
                 location : location
             }, prev_prec)
             return left
@@ -331,7 +328,7 @@ module.exports = tokens => {
         return parse_handler(reject => {
             if(!is_kw('for')) return; skip_kw('for')
             const location = tokens.save()
-            const _var = parse_assign(); skip_punc(',');
+            const _var = parse_declare(); skip_punc(',');
             if(!_var) unexpected()
 
             const statement = 
@@ -348,9 +345,10 @@ module.exports = tokens => {
                          parse_prefix() ||
                          parse_postfix()
             
-            INSIDE_LOOP = true
+            let ALREADY_INSIDE_LOOP = INSIDE_LOOP
+            if(!ALREADY_INSIDE_LOOP) INSIDE_LOOP = true
             const body = parse_body()
-            INSIDE_LOOP = false
+            if(!ALREADY_INSIDE_LOOP) INSIDE_LOOP = false
 
             return {
                 type      : 'for',
@@ -375,21 +373,6 @@ module.exports = tokens => {
         const location = tokens.save()
         if(!INSIDE_LOOP) unexpected()
         return { ...tokens.next(), location }
-    }
-
-    const parse_typeof = () => {
-        return parse_handler(reject => {
-            if(!is_kw('typeof')) return; skip_kw('typeof')
-            const location = tokens.save()
-            if(!is_var()) unexpected()
-            const name = skip_var().value
-
-            return {
-                type: 'typeof',
-                name: name,
-                location: location
-            }
-        })
     }
 
     const parse_prefix = () => {
@@ -433,11 +416,9 @@ module.exports = tokens => {
     const parse_atom = () => {
         try {
             return (
-                parse_typeof() ||
                 parse_binary() ||
                 parse_prefix() ||
                 parse_postfix() ||
-                parse_return() ||
                 parse_call() ||
                 parse_datatypes() || 
                 parse_signed() ||

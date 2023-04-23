@@ -1,26 +1,6 @@
-# :a/num = -69 + 420
-# :b/num = 420 / 2
-# :c/bol = false
-# :d/str = "Hello World!"
-
-# :a/num = -2
-# :b/num = 4
-# :c/num = a + b
-
-# @outln @num2str c
-
-# :a/num = 1
-# a = 2
-
-# :a/num = 1
-# :b/num = ++a + a++ + a
-
-# @outln @num2str b
-
-
-sum:/num a num, b num {
-    # ret a + b
-    :c/num = a + b
+@out "\""
+for :i/num = 0, i < 10, i++ {
+    @out @num2str i
 }
-
-@sum 1, 1
+@out "\""
+@out "\n"
