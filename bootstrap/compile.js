@@ -1117,16 +1117,14 @@ module.exports.generate_asm = ast => {
                     // we immediately free (not lazy_free) the old value or else
                     // we'll have memory overflows.
                     if(types_should_be_freed.has(type)) {
-                        write_code(`;; debug begin ${parent.context.var_offset}`)
-                        write_code(`push eax ; save new value`)
+                        write_code(`push eax`)
                         const new_value_offset = parent.context.var_offset += 4
                         execute_in_above_scope(() => {
                             write_code(`mov eax, [ebp - ${offset}]`)
                         }, found_var.lookup_index)
                         types_should_be_freed.get(type)(null, parent)
                         free_manually()
-                        write_code(`mov eax, [ebp - ${new_value_offset}] ; revert new value`)
-                        write_code(';; debug end')
+                        write_code(`mov eax, [ebp - ${new_value_offset}]`)
                     }
 
                     if(found_var.lookup_index > 0) {
@@ -1245,9 +1243,9 @@ module.exports.generate_asm = ast => {
                 write_code(`jne ${exit_label}`)
                 
                 read_scope(node.body.prog, world.parent, world.context)
+                write_code(`${continue_label}:`)
                 free_set_context(world)
 
-                write_code(`${continue_label}:`)
                 write_code(`mov esp, ebp`)
                 write_code(`pop ebp`)
 
@@ -1359,7 +1357,36 @@ module.exports.generate_asm = ast => {
     }
 
     const read_continue = (node, parent) => {
-        // todo: implement
+        const found_loop        = lookup_loop(node, parent)
+        const lookup_index      = found_loop.lookup_index
+        const continue_label    = found_loop.parent.context.loop_self.continue_label
+
+        return {
+            write_all: () => {
+                // loop each scope up until the first loop scope.
+                // after that for each scope execute the free_set_context
+                // and then jmp to the continue_label.
+                for(let i = 1; i <= lookup_index; i++) {
+                    execute_in_above_scope_context(parent, t_parent => {
+                        execute_in_above_scope(() => {
+                            // scope will die now. free any mapped data from it.
+                            free_set_context(t_parent)
+                        }, i)
+                    }, i)
+                }
+
+                // if the current scope is nested condition
+                // or loop, we want to leave the frame stack
+                // before we return.
+                // note: we want to do that for every nested scope.
+                for(let i = 0; i < lookup_index; i++) {
+                    write_code(`mov esp, ebp`)
+                    write_code(`pop ebp`)
+                }
+
+                write_code(`jmp ${continue_label}`)
+            }
+        }
     }
 
     const read_scope = (prog, opt_parent, opt_context) => {
@@ -1391,8 +1418,7 @@ module.exports.generate_asm = ast => {
             } else if(node.type == 'kw' && node.value == 'break') {
                 return read_break(node, world).write_all()
             } else if(node.type == 'kw' && node.value == 'continue') {
-                // return read_continue(node, world)
-                throw_not_implemented(node, world)
+                return read_continue(node, world).write_all()
             } else {
                 throw_unknown_node_type(node, world)
             }

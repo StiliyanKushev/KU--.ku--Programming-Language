@@ -1,16 +1,15 @@
-func:/str max num {
-    :var/str = "Hello"
-    :res/str
+str_rep:/str text str, times num {
     :i/num = 0
-
-    while true {
-        ++i
-        res = res + var
-        if i == max {
-            break
+    :r/str
+    while i++ < times {
+        
+        if i == times / 2 {
+            continue
         }
+
+        r = r + text
     }
-    ret res
+    ret r
 }
 
-@outln (@func 4000)
+@outln @str_rep "Hello", 3
