@@ -139,11 +139,47 @@ module.exports.generate_asm = ast => {
         context.free_set.set(unique_id, [addr_offset, size_offset])
     }
 
+    const free_manually = () => {
+        write_code(`push eax`)
+        write_code(`push ebx`)
+        write_code(`mov ecx, ebx`)
+        write_code(`mov ebx, eax`)
+        write_code(`mov eax, 91`)
+        write_code(`mov edx, 0`)
+        write_code(`int 0x80`)
+        write_code(`pop ebx`)
+        write_code(`pop eax`)
+    }
+
     // this function will typically run at the end of a scope.
     // it will loop the free_set set and "free" each of the stored entries.
-    const free_set_context = (context) => {
+    const free_set_context = (parent, opt_excludes = []) => {
+        // in a scenario where a local variable is assigned
+        // from whitin a nested scope, and the value has to 
+        // be freed, it is on us here to find such variables
+        // and add them to the free_set before we clear them
+        for(let var_data of parent.context.variables.values()) {
+            if(typeof var_data.free_id == 'undefined') {
+                continue
+            }
+            if(parent.context.free_set.has(var_data.free_id)) {
+                continue
+            }
+            if(opt_excludes.includes(var_data.free_id)) {
+                continue
+            }
+            // before we are able to free the var type we have to
+            // load the variable into eax
+            read_value({
+                type: 'var',
+                value: var_data.name
+            }, parent).write_all()
+            types_should_be_freed.get(var_data.type)(null, parent)
+            lazy_free(parent.context, var_data.free_id)
+        }
+
         write_code(`;; -- free_set_context -- ;;`)
-        const sets = Object.values(Object.fromEntries(context.free_set))
+        const sets = Object.values(Object.fromEntries(parent.context.free_set))
         if(sets.length == 0) return
         write_code(`push eax`)
         write_code(`push ebx`)
@@ -163,7 +199,7 @@ module.exports.generate_asm = ast => {
     // universal function for preparing context of a scope
     const create_context = (opt_extra = {}) => ({
         ...opt_extra,
-        variables: new Map(), // map variable name to offset of ebp for parent's scope
+        variables: new Map(), // map variable name to var data such as offset, type, etc
         functions: new Map(), // map function name to function label
         var_offset: 0,        // incremented offset for each new local variable on stack
         free_set: new Map(),  // map unique key to set that contains [addr_offset, size_offset] elements
@@ -202,6 +238,11 @@ module.exports.generate_asm = ast => {
     const throw_function_not_exist = (node, parent) => {
         throw_fatal_error(
             'function does not exist', node, parent)
+    }
+
+    const throw_loop_not_exist = (node, parent) => {
+        throw_fatal_error(
+            'loop does not exist', node, parent)
     }
 
     const throw_flag_not_exist = (node, parent) => {
@@ -333,6 +374,19 @@ module.exports.generate_asm = ast => {
 
         return lookup_function(
             node, parent.parent, name, lookup_index + 1)
+    }
+
+    const lookup_loop = (node, parent, lookup_index = 0) => {
+        if(!parent) throw_loop_not_exist(node, parent)
+        if(parent.context.loop_self) {
+            return {
+                parent: parent,
+                lookup_index: lookup_index
+            }
+        }
+
+        return lookup_loop(
+            node, parent.parent, lookup_index + 1)
     }
 
     const execute_in_above_scope_context = (parent, func, above_scope_index) => {
@@ -521,7 +575,10 @@ module.exports.generate_asm = ast => {
                     read_scope(node.body.prog, world.parent, world.context)
                 }
                 
-                write_code(`xor eax, eax`)
+                // return default value for ret_type
+                // if we got to here then `ret` wasn't called
+                read_ret({ type: 'ret' }, world).write_all()
+
                 write_code(`${label_ret_func}:`)
                 write_code(`mov esp, ebp`)
                 write_code(`pop ebp`)
@@ -642,6 +699,14 @@ module.exports.generate_asm = ast => {
                 }
                 com_value.write_all()
 
+                // free_set_context may or may not also dynamically
+                // add some variables to be freed, and this will 
+                // temper with the value of the eax register, and 
+                // therefor we'll lose the return value of the function.
+                // to patch that, store it, and it's temporary offset.
+                const return_offset = parent.context.var_offset += 4
+                write_code(`push eax`)
+
                 // loop each scope up until the first function scope
                 // that we will return the value of. for each scope,
                 // check if com_value is in the free set, and remove it.
@@ -665,7 +730,7 @@ module.exports.generate_asm = ast => {
 
                         execute_in_above_scope(() => {
                             // scope will die now. free any mapped data from it.
-                            free_set_context(t_parent.context)
+                            free_set_context(t_parent, [com_value.free_id])
                         }, i)
 
                         // if the "ret" is inside of a nested scope
@@ -680,6 +745,9 @@ module.exports.generate_asm = ast => {
                         }
                     }, i)
                 }
+
+                // bring back the return value
+                write_code(`mov eax, [ebp - ${return_offset}]`)
 
                 // if the current scope is nested condition
                 // or loop, we want to leave the frame stack
@@ -1008,7 +1076,13 @@ module.exports.generate_asm = ast => {
             return {
                 name, type, type_size, offset,
                 write_all: () => {
-                    let com_value  = read_value(node.value, parent, type)
+                    let com_value
+                    if(!node.value) {
+                        com_value = type_default_value(parent, type)
+                    } else {
+                        com_value  = read_value(node.value, parent, type)
+                    }
+                    
                     parent.context.variables.set(node.name, {
                         name, type, type_size, offset,
                         free_id: com_value.free_id
@@ -1031,11 +1105,41 @@ module.exports.generate_asm = ast => {
                 name, type, offset,
                 write_all: () => {
                     const new_value = read_value(node.value, parent, type)
+
                     // update the free id in-case the new assigned value is to be lazy
                     // freed later on
-                    found_var.parent.context.variables.get(node.name).free_id = new_value.free_id
+                    found_var.parent.context.variables.get(
+                        node.name).free_id = new_value.free_id
                     write_code(`;; --- assign "${name}" [${type}] (${offset}) --- ;;`)
                     new_value.write_all()
+
+                    // we're going to assign a variable, so we have to make sure
+                    // we immediately free (not lazy_free) the old value or else
+                    // we'll have memory overflows.
+                    if(types_should_be_freed.has(type)) {
+                        write_code(`;; debug begin ${parent.context.var_offset}`)
+                        write_code(`push eax ; save new value`)
+                        const new_value_offset = parent.context.var_offset += 4
+                        execute_in_above_scope(() => {
+                            write_code(`mov eax, [ebp - ${offset}]`)
+                        }, found_var.lookup_index)
+                        types_should_be_freed.get(type)(null, parent)
+                        free_manually()
+                        write_code(`mov eax, [ebp - ${new_value_offset}] ; revert new value`)
+                        write_code(';; debug end')
+                    }
+
+                    if(found_var.lookup_index > 0) {
+                        // we assign to a variable
+                        // from parent scope.
+                        // don't free it's value in the
+                        // current scope.
+                        if(parent.context.free_set.has(
+                            new_value.free_id)) {
+                                parent.context.free_set.delete(
+                                    new_value.free_id)
+                        }
+                    }
 
                     execute_in_above_scope(() => {
                         write_code(`mov [ebp-${offset}], eax`)
@@ -1070,6 +1174,7 @@ module.exports.generate_asm = ast => {
                 write_code(`push ebp`)
                 write_code(`mov ebp, esp`)
                 read_scope(node.body.prog, world_if.parent, world_if.context)
+                free_set_context(world_if)
                 write_code(`mov esp, ebp`)
                 write_code(`pop ebp`)
 
@@ -1088,6 +1193,7 @@ module.exports.generate_asm = ast => {
                         node.else.body.prog, 
                         world_else.parent, 
                         world_else.context)
+                    free_set_context(world_else)
                     write_code(`mov esp, ebp`)
                     write_code(`pop ebp`)
                 } else if(node.else?.type == 'if') {
@@ -1107,6 +1213,7 @@ module.exports.generate_asm = ast => {
     const read_while = (node, parent) => {
         const loop_label = create_label()
         const exit_label = create_label()
+        const continue_label = create_label()
 
         return {
             exit_label: exit_label,
@@ -1115,7 +1222,13 @@ module.exports.generate_asm = ast => {
                         
                 const world = {
                     parent: parent,
-                    context: create_context(),
+                    context: create_context({
+                        loop_self: {
+                            loop_label,
+                            exit_label,
+                            continue_label
+                        }
+                    }),
                 }
 
                 write_code(`push ebp`)
@@ -1132,6 +1245,9 @@ module.exports.generate_asm = ast => {
                 write_code(`jne ${exit_label}`)
                 
                 read_scope(node.body.prog, world.parent, world.context)
+                free_set_context(world)
+
+                write_code(`${continue_label}:`)
                 write_code(`mov esp, ebp`)
                 write_code(`pop ebp`)
 
@@ -1210,7 +1326,36 @@ module.exports.generate_asm = ast => {
     }
 
     const read_break = (node, parent) => {
-        // todo: implement
+        const found_loop    = lookup_loop(node, parent)
+        const lookup_index  = found_loop.lookup_index
+        const exit_label    = found_loop.parent.context.loop_self.exit_label
+
+        return {
+            write_all: () => {
+                // loop each scope up until the first loop scope.
+                // after that for each scope execute the free_set_context
+                // and then jmp to the exit_label.
+                for(let i = 0; i <= lookup_index; i++) {
+                    execute_in_above_scope_context(parent, t_parent => {
+                        execute_in_above_scope(() => {
+                            // scope will die now. free any mapped data from it.
+                            free_set_context(t_parent)
+                        }, i)
+                    }, i)
+                }
+
+                // if the current scope is nested condition
+                // or loop, we want to leave the frame stack
+                // before we return.
+                // note: we want to do that for every nested scope.
+                for(let i = 0; i < lookup_index; i++) {
+                    write_code(`mov esp, ebp`)
+                    write_code(`pop ebp`)
+                }
+
+                write_code(`jmp ${exit_label}`)
+            }
+        }
     }
 
     const read_continue = (node, parent) => {
@@ -1244,8 +1389,7 @@ module.exports.generate_asm = ast => {
             } else if(node.type == 'ret') {
                 return read_ret(node, world).write_all()
             } else if(node.type == 'kw' && node.value == 'break') {
-                // return read_break(node, world)
-                throw_not_implemented(node, world)
+                return read_break(node, world).write_all()
             } else if(node.type == 'kw' && node.value == 'continue') {
                 // return read_continue(node, world)
                 throw_not_implemented(node, world)
@@ -1254,8 +1398,7 @@ module.exports.generate_asm = ast => {
             }
         }
 
-        // scope will die now. free any mapped data from it.
-        free_set_context(world.context)
+        return world
     }
 
     // define all core functions/constants
@@ -1736,6 +1879,7 @@ module.exports.generate_asm = ast => {
         }
     }
 
-    read_scope(ast.prog, core_com)
+    const program_scope = read_scope(ast.prog, core_com)
+    free_set_context(program_scope)
     return asm_final()
 }

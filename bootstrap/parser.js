@@ -154,8 +154,7 @@ module.exports = tokens => {
                         parse_prefix() || 
                         parse_postfix() || 
                         parse_datatypes() ||
-                        parse_signed() || 
-                        parse_typeof()
+                        parse_signed()
                 if(!left)       return 
                 if(!is_op())    return
             }
@@ -177,8 +176,7 @@ module.exports = tokens => {
                     parse_prefix() || 
                     parse_postfix() || 
                     parse_datatypes() || 
-                    parse_signed() ||
-                    parse_typeof(), PRECEDENCE[op]),
+                    parse_signed(), PRECEDENCE[op]),
                 location : location
             }, prev_prec)
             return left
@@ -377,21 +375,6 @@ module.exports = tokens => {
         return { ...tokens.next(), location }
     }
 
-    const parse_typeof = () => {
-        return parse_handler(reject => {
-            if(!is_kw('typeof')) return; skip_kw('typeof')
-            const location = tokens.save()
-            if(!is_var()) unexpected()
-            const name = skip_var().value
-
-            return {
-                type: 'typeof',
-                name: name,
-                location: location
-            }
-        })
-    }
-
     const parse_prefix = () => {
         return parse_handler(reject => {
             if(!is_op('++') && !is_op('--')) return;
@@ -433,7 +416,6 @@ module.exports = tokens => {
     const parse_atom = () => {
         try {
             return (
-                parse_typeof() ||
                 parse_binary() ||
                 parse_prefix() ||
                 parse_postfix() ||

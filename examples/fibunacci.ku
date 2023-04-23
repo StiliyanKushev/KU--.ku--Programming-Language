@@ -1,13 +1,16 @@
-func:/str {
-    :rval/str
-    :var/num = 0
-    while var < 2 {
-        var++
-        rval = @num2str var
-        if var == 1 {
-            ret rval
+func:/str max num {
+    :var/str = "Hello"
+    :res/str
+    :i/num = 0
+
+    while true {
+        ++i
+        res = res + var
+        if i == max {
+            break
         }
     }
+    ret res
 }
 
-@outln @func
+@outln (@func 4000)
