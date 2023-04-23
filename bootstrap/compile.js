@@ -206,6 +206,7 @@ module.exports.generate_asm = ast => {
     })
 
     const util_string_to_hex_arr = (string) => {
+        console.log('util_string_to_hex_arr', string, string.length)
         let arr = []
         for (let i = 0; i < string.length; i++) {
             const asciiCode = string.charCodeAt(i)
@@ -243,11 +244,6 @@ module.exports.generate_asm = ast => {
     const throw_loop_not_exist = (node, parent) => {
         throw_fatal_error(
             'loop does not exist', node, parent)
-    }
-
-    const throw_flag_not_exist = (node, parent) => {
-        throw_fatal_error(
-            'flag does not exist', node, parent)
     }
 
     const throw_variable_already_declared = (node, parent) => {
@@ -1205,7 +1201,33 @@ module.exports.generate_asm = ast => {
     }
 
     const read_for = (node, parent) => {
-        // todo: implement
+        // add the post atom to the end of the loop body
+        node.body.prog.push(node.post)
+
+        return {
+            write_all: () => {
+                const world_for = {
+                    parent: parent,
+                    context: create_context(),
+                }
+
+                write_code(`push ebp`)
+                write_code(`mov ebp, esp`)
+                read_scope([
+                    // declaration
+                    node.var,
+                    // loop
+                    {
+                        type: 'while',
+                        statement: node.statement,
+                        body: node.body
+                    },
+                ], world_for.parent, world_for.context)
+                free_set_context(world_for)
+                write_code(`mov esp, ebp`)
+                write_code(`pop ebp`)
+            }
+        }
     }
 
     const read_while = (node, parent) => {
@@ -1405,8 +1427,7 @@ module.exports.generate_asm = ast => {
             } else if(node.type == 'if') {
                 read_if(node, world).write_all()
             } else if(node.type == 'for') {
-                // read_for(node, world)
-                throw_not_implemented(node, world)
+                read_for(node, world).write_all()
             } else if(node.type == 'while') {
                 read_while(node, world).write_all()
             } else if(node.type == 'postfix') {

@@ -59,7 +59,6 @@ module.exports = tokens => {
         return arr
     }
 
-    // parsing functions
     const parse_datatypes = (tok, allowVar = true) => {
         return parse_handler(reject => {
             const current = tok || tokens.next()
@@ -329,7 +328,7 @@ module.exports = tokens => {
         return parse_handler(reject => {
             if(!is_kw('for')) return; skip_kw('for')
             const location = tokens.save()
-            const _var = parse_assign(); skip_punc(',');
+            const _var = parse_declare(); skip_punc(',');
             if(!_var) unexpected()
 
             const statement = 
@@ -346,9 +345,10 @@ module.exports = tokens => {
                          parse_prefix() ||
                          parse_postfix()
             
-            INSIDE_LOOP = true
+            let ALREADY_INSIDE_LOOP = INSIDE_LOOP
+            if(!ALREADY_INSIDE_LOOP) INSIDE_LOOP = true
             const body = parse_body()
-            INSIDE_LOOP = false
+            if(!ALREADY_INSIDE_LOOP) INSIDE_LOOP = false
 
             return {
                 type      : 'for',

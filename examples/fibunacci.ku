@@ -1,15 +1,6 @@
-str_rep:/str text str, times num {
-    :i/num = 0
-    :r/str
-    while i++ < times {
-        
-        if i == times / 2 {
-            continue
-        }
-
-        r = r + text
-    }
-    ret r
+@out "\""
+for :i/num = 0, i < 10, i++ {
+    @out @num2str i
 }
-
-@outln @str_rep "Hello", 3
+@out "\""
+@out "\n"

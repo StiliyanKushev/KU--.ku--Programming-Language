@@ -1,5 +1,5 @@
 module.exports = reader => {
-    var keywords = ' if else for while true false ret break continue typeof num str bol '
+    var keywords = ' if else for while true false ret break continue num str bol '
 
     // navigation functions
     const next = () => read_next()
@@ -35,7 +35,7 @@ module.exports = reader => {
     }
 
     // returns string token
-    const read_string = () => { return { type: 'str', value: read_escaped('"') } }
+    const read_string = () => ({ type: 'str', value: read_escaped('"') })
 
     // returns number token
     const read_number = () => {
@@ -44,13 +44,25 @@ module.exports = reader => {
         return { type: 'num', value: parseFloat(number) }
     }
 
+    const read_as_escaped = ch => {
+        const escape_map = {
+            'n': '\n',
+            't': '\t',
+            'r': '\r',
+            'f': '\f',
+            'v': '\v'
+        }
+        return escape_map[ch] || ch
+    }
+
     // returns escaped by "end" string
     const read_escaped = end => {
         let escaped = false, str = '', ch = reader.next()
         while (!reader.eof()) {
             ch = reader.next()
             if(escaped) { str += ch ; escaped = false }
-            else if (ch == '\\') escaped = true
+            else if (ch == '\\' && reader.peek() == end) escaped = true
+            else if (ch == '\\') str += read_as_escaped(reader.next())
             else if (ch == end) break
             else str += ch
         }
