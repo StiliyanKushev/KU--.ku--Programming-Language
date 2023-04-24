@@ -15,7 +15,7 @@ module.exports.compile_asm = (asm, output) => {
     
     const asm_path  = path.join(working_dir, './nasm.asm')
     const obj_path  = path.join(working_dir, './object.o')
-    const exe_path  = path.join(process.cwd(), `./${output}`)
+    const exe_path  = path.resolve(output)
 
     const nasm_cmd  = `nasm -felf32 -g "${asm_path}" -o "${obj_path}"`
     const link_cmd  = `ld -m elf_i386 -o "${exe_path}" "${obj_path}"`
@@ -206,7 +206,6 @@ module.exports.generate_asm = ast => {
     })
 
     const util_string_to_hex_arr = (string) => {
-        console.log('util_string_to_hex_arr', string, string.length)
         let arr = []
         for (let i = 0; i < string.length; i++) {
             const asciiCode = string.charCodeAt(i)

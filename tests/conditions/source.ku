@@ -1,0 +1,16 @@
+:i/num = 0
+
+func:/bol {
+    if i == 0 {
+        @outln @num2str 0
+    } else if i == 1 {
+        @outln @num2str 1
+    } else if i == 2 {
+        @outln @num2str 2
+    }
+    i++
+}
+
+(@func)
+(@func)
+(@func)

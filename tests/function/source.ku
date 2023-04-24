@@ -8,7 +8,7 @@ func:/str {
     func3:/str {
         ret "World"
     }
-    ret @func2 + @func3
+    ret (@num2str @func1) + @func2 + @func3
 }
 
 @outln @func
