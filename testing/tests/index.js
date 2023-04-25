@@ -7,7 +7,7 @@ const path            = require('path')
 const { execSync }    = require('child_process')
 const diff            = require('diff')
 
-const compiler_path   = path.join(__dirname, '../bootstrap/index.js')
+const compiler_path   = path.join(__dirname, '../../bootstrap/index.js')
 const tmp_path        = path.join(os.tmpdir(), `./${Math.random().toString().replace('.', '')}`)
 
 fs.mkdirSync(tmp_path)
