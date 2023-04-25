@@ -6,9 +6,13 @@ const {
     exit_error
 } = require('./cmd')
 
-module.exports.compile_asm = (asm, output) => {
-    console.log(asm.split('\n').map((ln, i) => `${i + 1}: ${ln}`).join('\n'))
-    console.log('-'.repeat(process.stdout.columns))
+module.exports.compile_asm = (asm, options) => {
+    const output = options.output
+
+    if(options.asm) {
+        console.log(asm.split('\n').map((ln, i) => `${i + 1}: ${ln}`).join('\n'))
+        console.log('-'.repeat(process.stdout.columns))
+    }
 
     let working_dir = path.join(os.tmpdir(), `./${Math.random()}`)
     fs.mkdirSync(working_dir)
@@ -91,9 +95,6 @@ const counters = {
 let _label_inc = 0, create_label = () => '__' + (++_label_inc).toFixed(10).replace('.', '_')
 
 module.exports.generate_asm = ast => {
-    console.dir(ast, { depth: null })
-    console.log('-'.repeat(process.stdout.columns))
-
     // list of types that require their memory address
     // to be freed right before the scope dies.
     // each one has a function that free's the data from eax.

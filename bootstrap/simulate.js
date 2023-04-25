@@ -199,9 +199,6 @@ const exec_internal = (node, parent) => {
 }
 
 module.exports.simulate_ast = ast => {
-    console.dir(ast, { depth: null })
-    console.log('-'.repeat(process.stdout.columns))
-
     const throw_fatal_error = (error, node, parent) => {
         exit_error(`\nerror: ${error}\nat: row: ${node?.location?.line} col: ${node?.location?.col}`)
     }

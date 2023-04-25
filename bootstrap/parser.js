@@ -78,9 +78,13 @@ module.exports = tokens => {
     const parse_signed = () => {
         return parse_handler(reject => {
             const location = tokens.save()
+
+            if(!is_punc('(')) return; skip_punc('(')
             if(!is_op('-') && !is_op('+')) return; const op = tokens.next()
             const expr = parse_datatypes() || parse_call()
             if(!expr || ['bol','str'].includes(expr.type)) return
+            if(!is_punc(')')) return; skip_punc(')')
+
             return {
                 type: 'signed',
                 op: op,

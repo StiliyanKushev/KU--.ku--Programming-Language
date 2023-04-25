@@ -19,8 +19,8 @@ const reader    = require('./reader')(raw)          // Functions for handling re
 const tokenizer = require('./tokenizer')(reader)    // Give each word a meaning (operant, keyword, variable, etc)
 const ast       = require('./parser')(tokenizer)()  // Parse tokens into a program tree
 
-if     (options.help)       help()
-else if(options.version)    version()
-else if(options.ast)        print_ast(ast)
-else if(options.compile)    compile_asm(generate_asm(ast), options.output)
-else if(!options.compile)   simulate_ast(ast)
+if (options.help)      help()
+if (options.version)   version()
+if (options.ast)       print_ast(ast)
+if (options.compile)   compile_asm(generate_asm(ast), options)
+else                   simulate_ast(ast)
