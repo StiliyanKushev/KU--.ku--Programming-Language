@@ -628,8 +628,11 @@ module.exports.simulate_ast = ast => {
             context: opt_context || create_context()
         }
 
+        const was_loop = world.context.flags.has('loop')
+
         for(let node of prog) {
             if(world.context.flags.has('continue')) break
+            if(!world.context.flags.has('loop') && was_loop) break
             if(world.context.flags.has('ret_value')) {
                 return world.context.flags.get('ret_value')
             }

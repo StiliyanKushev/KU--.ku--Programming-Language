@@ -1201,9 +1201,6 @@ module.exports.generate_asm = ast => {
     }
 
     const read_for = (node, parent) => {
-        // add the post atom to the end of the loop body
-        node.body.prog.push(node.post)
-
         return {
             write_all: () => {
                 const world_for = {
@@ -1220,7 +1217,8 @@ module.exports.generate_asm = ast => {
                     {
                         type: 'while',
                         statement: node.statement,
-                        body: node.body
+                        body: node.body,
+                        opt_post_body: [node.post]
                     },
                 ], world_for.parent, world_for.context)
                 free_set_context(world_for)
@@ -1266,6 +1264,11 @@ module.exports.generate_asm = ast => {
                 
                 read_scope(node.body.prog, world.parent, world.context)
                 write_code(`${continue_label}:`)
+
+                if(node.opt_post_body) {
+                    read_scope(node.opt_post_body, world.parent, world.context)
+                }
+
                 free_set_context(world)
 
                 write_code(`mov esp, ebp`)
