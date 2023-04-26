@@ -1,8 +1,0 @@
-:a/num = 69
-:b/str = "hello"
-:c/bol = true
-
-# @out a
-# @out b
-# @out c
-# @outln "\ngood bye"

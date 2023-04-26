@@ -1,20 +1,23 @@
-for :i/num = 0, i < 10, i++ {
-    while true {
-        if i < 10 {
-            break
-        }
+# index
+# ---------------------------------------------
+# 0, 1, 2, 3, 4, 5, 6,  7,  8,  9,  10, 11
+# ---------------------------------------------
+# value
+# ---------------------------------------------
+# 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144 ...
+# ---------------------------------------------
+
+fib:/num max_index num {
+    :left/num = 1
+    :right/num = 1
+
+    for :i/num = 0, i < max_index - 1, i++ {
+        :temp/num = right
+        right = right + left
+        left = temp
     }
 
-    if i == 9 { break }
-    if i % 2 == 0 { continue }
-
-    @outln @num2str i
-
-    if i == 5 {
-        while i > 0 {
-            @out @num2str i
-            i--
-        }
-        i = 5
-    }
+    ret right
 }
+
+@outln @num2str @fib 5 # prints 8 correctly!
