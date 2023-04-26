@@ -391,7 +391,7 @@ module.exports.simulate_ast = ast => {
     }
 
     const read_func = (node, parent) => {
-        if(lookup_function(node, parent, node.name, false)) {
+        if(parent.context.functions.has(node.name)) {
             throw_function_already_declared(node, parent)
         }
         parent.context.functions.set(node.name, node)

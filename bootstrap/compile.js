@@ -976,14 +976,14 @@ module.exports.generate_asm = ast => {
                 }
             } else if(node.operator == '>') {
                 if(type == 'bol') {
-                    const nl = create_label()
+                    const ng = create_label()
                     const end = create_label()
                     write_code(`cmp eax, ebx ;; >`)
-                    write_code(`jnl ${nl}`)
-                    write_code(`mov eax, 0`)
-                    write_code(`jmp ${end}`)
-                    write_code(`${nl}:`)
+                    write_code(`jng ${ng}`)
                     write_code(`mov eax, 1`)
+                    write_code(`jmp ${end}`)
+                    write_code(`${ng}:`)
+                    write_code(`mov eax, 0`)
                     write_code(`${end}:`)
                 } else {
                     throw_unsupported_operation(node, parent)
@@ -1004,14 +1004,14 @@ module.exports.generate_asm = ast => {
                 }
             } else if(node.operator == '>=') {
                 if(type == 'bol') {
-                    const nl = create_label()
+                    const ng = create_label()
                     const end = create_label()
                     write_code(`cmp eax, ebx ;; >=`)
-                    write_code(`jnle ${nl}`)
-                    write_code(`mov eax, 0`)
-                    write_code(`jmp ${end}`)
-                    write_code(`${nl}:`)
+                    write_code(`jnge ${ng}`)
                     write_code(`mov eax, 1`)
+                    write_code(`jmp ${end}`)
+                    write_code(`${ng}:`)
+                    write_code(`mov eax, 0`)
                     write_code(`${end}:`)
                 } else {
                     throw_unsupported_operation(node, parent)
