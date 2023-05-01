@@ -6,16 +6,20 @@ const {
     exit_error
 } = require('./cmd')
 
-module.exports.compile_asm = (asm, output) => {
-    console.log(asm.split('\n').map((ln, i) => `${i + 1}: ${ln}`).join('\n'))
-    console.log('-'.repeat(process.stdout.columns))
+module.exports.compile_asm = (asm, options) => {
+    const output = options.output
+
+    if(options.asm) {
+        console.log(asm.split('\n').map((ln, i) => `${i + 1}: ${ln}`).join('\n'))
+        console.log('-'.repeat(process.stdout.columns))
+    }
 
     let working_dir = path.join(os.tmpdir(), `./${Math.random()}`)
     fs.mkdirSync(working_dir)
     
     const asm_path  = path.join(working_dir, './nasm.asm')
     const obj_path  = path.join(working_dir, './object.o')
-    const exe_path  = path.join(process.cwd(), `./${output}`)
+    const exe_path  = path.resolve(output)
 
     const nasm_cmd  = `nasm -felf32 -g "${asm_path}" -o "${obj_path}"`
     const link_cmd  = `ld -m elf_i386 -o "${exe_path}" "${obj_path}"`
@@ -91,9 +95,6 @@ const counters = {
 let _label_inc = 0, create_label = () => '__' + (++_label_inc).toFixed(10).replace('.', '_')
 
 module.exports.generate_asm = ast => {
-    console.dir(ast, { depth: null })
-    console.log('-'.repeat(process.stdout.columns))
-
     // list of types that require their memory address
     // to be freed right before the scope dies.
     // each one has a function that free's the data from eax.
@@ -206,7 +207,6 @@ module.exports.generate_asm = ast => {
     })
 
     const util_string_to_hex_arr = (string) => {
-        console.log('util_string_to_hex_arr', string, string.length)
         let arr = []
         for (let i = 0; i < string.length; i++) {
             const asciiCode = string.charCodeAt(i)
@@ -258,7 +258,7 @@ module.exports.generate_asm = ast => {
 
     const throw_unknown_node_type = (node, parent) => {
         throw_fatal_error(
-            "unknown node type", node, parent)
+            `unknown node type {${node.type}}`, node, parent)
     }
 
     const throw_function_invalid_arguments_count = (node, parent) => {
@@ -411,6 +411,12 @@ module.exports.generate_asm = ast => {
             }
         }
 
+        // we could have multiple optional types for some reason
+        // normalize if we pass only one as text
+        if(opt_value_type && !Array.isArray(opt_value_type)) {
+            opt_value_type = [opt_value_type]
+        }
+
         // we pass a custom write_all and type
         if(node.type == 'override') {
             return {
@@ -420,8 +426,17 @@ module.exports.generate_asm = ast => {
 
         // note: opt_type is given when it's not a simple type (ex: str, num, bol)
         const check_value_type = opt_type => {
-            if(opt_type && opt_value_type && opt_type != opt_value_type) {
-                throw_invalid_value_type(node, parent)
+            if(opt_type && opt_value_type) {
+                let invalid = true
+                for(let ovt of opt_value_type) {
+                    if(opt_type == ovt) {
+                        invalid = false
+                        break
+                    }
+                }
+                if (invalid) {
+                    throw_invalid_value_type(node, parent)
+                }
             }
             if(!opt_type && node.type != opt_value_type) {
                 throw_invalid_value_type(node, parent)
@@ -497,6 +512,14 @@ module.exports.generate_asm = ast => {
             return com_value
         } else if(node.type == 'prefix') {
             const com_value = read_prefix(node, parent)
+            check_value_type(com_value.type)
+            return com_value
+        } if(node.type == 'pointer') {
+            const com_value = read_pointer(node, parent)
+            check_value_type(com_value.type)
+            return com_value
+        } if(node.type == 'cast') {
+            const com_value = read_cast(node, parent)
             check_value_type(com_value.type)
             return com_value
         } else {
@@ -590,7 +613,7 @@ module.exports.generate_asm = ast => {
         const name          = found_func.value.name
         const ret_type      = found_func.value.ret_type
         const ret_size      = found_func.value.ret_size
-        const func_args     = found_func.value.args
+        const func_args     = [...found_func.value.args]
         const _start_func   = found_func.value.label_start_func
 
         if(func_args.length > node.args.length) {
@@ -764,11 +787,21 @@ module.exports.generate_asm = ast => {
         return {
             type: 'num',
             write_all: () => {
-                const com_value = read_value(node.value, parent, 'num')
+                const com_value = read_value(node.value, parent, ['num', 'str'])
                 com_value.write_all()
-                write_code(`;; signed num`)
-                if(node.op.value == '-') {
-                    write_code(`neg eax`)
+
+                // because in this language the type "str" is just a ptr
+                // we can have a hack that converts the pointer to the string
+                // to a number by making it singed.
+                if(com_value.type == 'str' && node.op.value == '+') {
+                    write_code(`;; signed string to number`)
+                    write_code(`mov eax, eax`)
+                }
+                else {
+                    write_code(`;; signed num`)
+                    if(node.op.value == '-') {
+                        write_code(`neg eax`)
+                    }
                 }
             }
         }
@@ -976,14 +1009,14 @@ module.exports.generate_asm = ast => {
                 }
             } else if(node.operator == '>') {
                 if(type == 'bol') {
-                    const nl = create_label()
+                    const ng = create_label()
                     const end = create_label()
                     write_code(`cmp eax, ebx ;; >`)
-                    write_code(`jnl ${nl}`)
-                    write_code(`mov eax, 0`)
-                    write_code(`jmp ${end}`)
-                    write_code(`${nl}:`)
+                    write_code(`jng ${ng}`)
                     write_code(`mov eax, 1`)
+                    write_code(`jmp ${end}`)
+                    write_code(`${ng}:`)
+                    write_code(`mov eax, 0`)
                     write_code(`${end}:`)
                 } else {
                     throw_unsupported_operation(node, parent)
@@ -1004,14 +1037,14 @@ module.exports.generate_asm = ast => {
                 }
             } else if(node.operator == '>=') {
                 if(type == 'bol') {
-                    const nl = create_label()
+                    const ng = create_label()
                     const end = create_label()
                     write_code(`cmp eax, ebx ;; >=`)
-                    write_code(`jnle ${nl}`)
-                    write_code(`mov eax, 0`)
-                    write_code(`jmp ${end}`)
-                    write_code(`${nl}:`)
+                    write_code(`jnge ${ng}`)
                     write_code(`mov eax, 1`)
+                    write_code(`jmp ${end}`)
+                    write_code(`${ng}:`)
+                    write_code(`mov eax, 0`)
                     write_code(`${end}:`)
                 } else {
                     throw_unsupported_operation(node, parent)
@@ -1055,6 +1088,39 @@ module.exports.generate_asm = ast => {
             type: type,
             free_id: opt_free_id,
             write_all: write_all
+        }
+    }
+
+    const read_pointer = (node, parent) => {
+        const found_var     = lookup_variable(node, parent, node.name)
+        const var_name      = found_var.value.name
+        return {
+            type: 'num',
+            write_all: () => {
+                write_code(`;; var pointer ${var_name}`)
+                execute_in_above_scope(() => {
+                    write_code(`lea eax, [ebp - ${found_var.ebp_offset}]`)
+                }, found_var.lookup_index)
+            }
+        }
+    }
+
+    const read_cast = (node, parent) => {
+        return {
+            type: node.cast_type.value,
+            write_all: () => {
+                write_code(`;; cast var ${node.cast_type.value}`)
+                read_value(node.value, parent, 'num').write_all()
+
+                if(node.cast_type.value == 'str') {
+                    // strings are already pointer, so we basically
+                    // ignore that, but we return as type str so 
+                    // the compiler now thinks this address is a string
+                }
+                else {
+                    write_code(`mov eax, [eax]`)
+                }
+            }
         }
     }
 
@@ -1201,9 +1267,6 @@ module.exports.generate_asm = ast => {
     }
 
     const read_for = (node, parent) => {
-        // add the post atom to the end of the loop body
-        node.body.prog.push(node.post)
-
         return {
             write_all: () => {
                 const world_for = {
@@ -1220,7 +1283,8 @@ module.exports.generate_asm = ast => {
                     {
                         type: 'while',
                         statement: node.statement,
-                        body: node.body
+                        body: node.body,
+                        opt_post_body: [node.post]
                     },
                 ], world_for.parent, world_for.context)
                 free_set_context(world_for)
@@ -1266,6 +1330,11 @@ module.exports.generate_asm = ast => {
                 
                 read_scope(node.body.prog, world.parent, world.context)
                 write_code(`${continue_label}:`)
+
+                if(node.opt_post_body) {
+                    read_scope(node.opt_post_body, world.parent, world.context)
+                }
+
                 free_set_context(world)
 
                 write_code(`mov esp, ebp`)
@@ -1453,9 +1522,11 @@ module.exports.generate_asm = ast => {
         constructor() {
             this.parent = undefined
             this.context = create_context()
-    
+
+            // strings
             this.context.functions.set("strlen", this.strlen)
             this.context.functions.set("strapnd", this.strapnd)
+            this.context.functions.set("strcut", this.strcut)
 
             // stdio 
             this.context.functions.set("out", this.out)
@@ -1466,6 +1537,10 @@ module.exports.generate_asm = ast => {
             this.context.functions.set("num2str", this.num2str)
             this.context.functions.set("str2num", this.str2num)
             this.context.functions.set("str2bol", this.str2bol)
+
+            // input
+            this.context.functions.set("rkey", this.rkey)
+            this.context.functions.set("rline", this.rline)
         }
     
         make_arg(name, type) {
@@ -1494,6 +1569,123 @@ module.exports.generate_asm = ast => {
             func_def.write_all()
             return func_def
         }
+
+        get rkey() {
+            return this.make_func({
+                name: 'rkey',
+                ret_type: 'str',
+                args: [],
+                write_internal: (world, data) => {
+                    // Allocate space on the stack for orig_termios
+                    write_code(`sub esp, 44`)
+                    world.context.var_offset += 44
+                
+                    // Save original terminal settings
+                    write_code(`mov eax, 54`)       
+                    write_code(`xor ebx, ebx`)
+                    write_code(`mov ecx, 0x5401`)
+                    write_code(`mov edx, esp`)
+                    write_code(`int 0x80`)
+
+                    write_code(`mov eax, esp`)
+                    read_var({
+                        mode: 'declare',
+                        name: 'struct',
+                        value_type: { value: 'str' },
+                        value: {
+                            type: 'override',
+                            override: {
+                                write_all: () => {} 
+                            }
+                        }
+                    }, world).write_all()
+                
+                    // Set terminal to raw mode
+                    read_value({
+                        type: 'var',
+                        value: 'struct'
+                    }, world).write_all()
+                    write_code(`and dword [eax + 12], ~(0x00000008 | 0x00000002)`)
+                    write_code(`mov edx, eax`)
+                    write_code(`mov ebx, 0`)
+                    write_code(`mov eax, 54`)
+                    write_code(`mov ecx, 0x5402`)
+                    write_code(`int 0x80`)
+
+                    // Store to string so we can return it
+                    write_code(`push ebp`)
+                    write_code(`xor ebx, ebx`)
+                    write_code(`mov ecx, 8`)
+                    write_code(`mov edx, 0x3`)
+                    write_code(`mov esi, 0x22`)
+                    write_code(`mov edi, -1`)
+                    write_code(`xor ebp, ebp`)
+                    write_code(`mov eax, 192`)
+                    write_code(`int 0x80`)
+                    write_code(`pop ebp`)
+
+                    // store the allocated space address to a variable
+                    read_var({
+                        mode: 'declare',
+                        name: 'addr',
+                        value_type: { value: 'str' },
+                        value: {
+                            type: 'override',
+                            override: {
+                                write_all: () => {} // default eax
+                            }
+                        }
+                    }, world).write_all()
+
+                    read_value({
+                        type: 'var',
+                        value: 'addr'
+                    }, world).write_all()
+                    
+                    // add the string terminator at the end
+                    write_code(`mov byte [eax + 4], 0x0`)
+
+                    // Read a single character from stdin
+                    write_code(`mov ecx, eax`)
+                    write_code(`mov eax, 3`)
+                    write_code(`xor ebx, ebx`)
+                    write_code(`mov edx, 1`)
+                    write_code(`int 0x80`)
+
+                    read_value({
+                        type: 'var',
+                        value: 'struct'
+                    }, world).write_all()
+
+                    // Restore terminal settings
+                    write_code(`mov edx, eax`)
+                    write_code(`mov eax, 54`)
+                    write_code(`xor ebx, ebx`)
+                    write_code(`mov ecx, 0x5402`)
+                    write_code(`int 0x80`)
+                    
+                    // return read address
+                    read_value({
+                        type: 'var',
+                        value: 'addr'
+                    }, world).write_all()
+
+                    write_code(`jmp ${data.label_ret_func}`)
+                }
+            })
+        }
+
+        get rline() {
+            return this.make_func({
+                name: 'rline',
+                ret_type: 'str',
+                args: [],
+                write_internal: (_, data) => {
+                    write_code(`;; TODO ;;`)
+                    write_code(`jmp ${data.label_ret_func}`)
+                }
+            })
+        }
     
         get strlen() {
             const loop_start = create_label()
@@ -1512,6 +1704,145 @@ module.exports.generate_asm = ast => {
                     write_code(`inc ecx`)
                     write_code(`jmp ${loop_start}`)
                     write_code(`${loop_end}:`)
+                    write_code(`mov eax, ecx`)
+                    write_code(`jmp ${data.label_ret_func}`)
+                }
+            })
+        }
+
+        get strcut() {
+            return this.make_func({
+                name: 'strcut',
+                ret_type: 'str',
+                args: [ this.make_arg('l', 'str'), this.make_arg('l_length', 'num') ],
+                write_internal: (world, data) => {
+                    const l_loop_label = create_label()
+                    const skip_empty_ret_string = create_label()
+
+                    read_value({
+                        type: 'var',
+                        value: 'l_length'
+                    }, world).write_all()
+
+                    // if it's 0, just return empty string fast
+                    write_code(`cmp eax, 0`)
+                    write_code(`jne ${skip_empty_ret_string}`)
+                    read_ret({
+                        value: {
+                            type: 'str',
+                            value: ""
+                        }
+                    }, world).write_all()
+                    write_code(`${skip_empty_ret_string}:`)
+
+                    // allocate space for that string and store to eax
+                    write_code(`push ebp`)
+                    write_code(`xor ebx, ebx`)
+                    write_code(`mov ecx, eax`)
+                    write_code(`mov edx, 0x3`)
+                    write_code(`mov esi, 0x22`)
+                    write_code(`mov edi, -1`)
+                    write_code(`xor ebp, ebp`)
+                    write_code(`mov eax, 192`)
+                    write_code(`int 0x80`)
+                    write_code(`pop ebp`)
+                    
+                    // store the allocated space address to a variable
+                    read_var({
+                        mode: 'declare',
+                        name: 'addr',
+                        value_type: { value: 'str' },
+                        value: {
+                            type: 'override',
+                            override: {
+                                write_all: () => {} // default eax
+                            }
+                        }
+                    }, world).write_all()
+
+                    // temporary store for the current char to put
+                    // to the new address space.
+                    read_var({
+                        mode: 'declare',
+                        name: 'temp',
+                        value_type: { value: 'str' },
+                        value: null
+                    }, world).write_all()
+                    const temp_offset = world.context.variables.get('temp').offset
+
+                    // current index variable
+                    read_var({
+                        mode: 'declare',
+                        name: 'index',
+                        value_type: { value: 'num' },
+                        value: null
+                    }, world).write_all()
+
+                    // fill the allocated space with the left string
+                    write_code(`${l_loop_label}:`)
+                    // load the pointer of the "l" variable to eax
+                    read_value({
+                        type: 'var',
+                        value: 'l'
+                    }, world).write_all()
+                    write_code(`mov ebx, eax`)
+                    read_value({
+                        type: 'var',
+                        value: 'index'
+                    }, world).write_all()
+                    write_code(`add ebx, eax`)
+                    // we now have a pointer to the char of "l" at "index" in eax
+                    write_code(`mov eax, ebx`)
+                    // assign "temp" the ascii "char" at that pointer
+                    write_code(`mov bl, byte [eax]`)
+                    write_code(`mov byte [ebp - ${temp_offset}], bl`)
+                    // load index to eax again
+                    read_value({
+                        type: 'var',
+                        value: 'index'
+                    }, world).write_all()
+                    write_code(`mov ebx, eax`)
+                    read_value({
+                        type: 'var',
+                        value: 'addr'
+                    }, world).write_all()
+                    write_code(`add ebx, eax`)
+                    // we now have a pointer to the dest addr at the correct index
+                    write_code(`mov eax, ebx`)
+                    // load the "temp" character to the dest addr space
+                    write_code(`mov bl, byte [ebp - ${temp_offset}]`)
+                    write_code(`mov byte [eax], bl`)
+                    // increase the index
+                    read_postfix({
+                        type: 'prefix',
+                        name: 'index',
+                        op: { type: 'op', value: '++' },
+                    }, world).write_all()
+                    // conditionally, loop back until we load the entire "l" string
+                    read_value({
+                        type: 'var',
+                        value: 'index'
+                    }, world).write_all()
+                    write_code(`mov ebx, eax`)
+                    read_value({
+                        type: 'var',
+                        value: 'l_length'
+                    }, world).write_all()
+                    write_code(`cmp ebx, eax`)
+                    write_code(`jl ${l_loop_label}`)
+
+                    // returns the pointer to the string in eax
+                    // and also store the size of mapped data to ebx (for lazy free)
+                    read_value({
+                        type: 'var',
+                        value: 'addr'
+                    }, world).write_all()
+                    write_code(`mov ecx, eax`)
+                    read_value({
+                        type: 'var',
+                        value: 'l_length'
+                    }, world).write_all()
+                    write_code(`mov ebx, eax`)
                     write_code(`mov eax, ecx`)
                     write_code(`jmp ${data.label_ret_func}`)
                 }

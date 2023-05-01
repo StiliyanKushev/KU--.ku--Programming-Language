@@ -1,99 +1,69 @@
-:a # assign a variable and set it to null
-:b = 2
-b = 1
-:c = 1 + b + 3
-:d = true
-:e = true && false
-:f = (3 + 5)
-:g = (true)
-:h = (true || false)
-:i = "string"
-:j = "my string" 
+rline:/str {
+    :input/str
+    :new_char/str
+    while true {
+        :key/str = (@rkey)
+        # new line was pressed, line is read.
+        if (?num (+key)) == (?num (+@strcut "\n", 1)) {
+            @out key
+            break
+        }
+        # user deleted
+        else if (?num (+key)) == 127 || (?num (+key)) == 23 {
+            # remove last entry
+            input = @strcut input, (@strlen input) - 1
 
-# left comment # :myTempVar # comments can end with a hashtag #
-
-# that's a function that takes no arguments
-print: {
-    # we call the out function with a string argument
-    @out "Hello World"
-}
-
-# this function prints the type of a value
-printType: val {
-    if typeof val == "string" {
-        @out "string"
+            # move cursor to the left
+            @out "\x1b[1D \x1b[1D"
+        }
+        # tab is always 4 spaces
+        else if (?num (+key)) == (?num (+@strcut "\t", 1)) {
+            input = input + "    "
+            @out "    "
+        }
+        else {
+            input = input + key
+            @out key
+        }
     }
-    else if typeof val == "number" {
-        @out "number"
+    ret input
+}
+
+str2num:/num text str {
+    :result/num
+    # todo: error checking
+    for :i/num = 0, i < (@strlen text), i++ {
+        :ascii_num/num = ?num (+@strcut (?str (+text) + i), 1)
+        ascii_num = ascii_num - 48
+        for :j/num = i, j < (@strlen text) - 1, j++ {
+            ascii_num = ascii_num * 10
+        }
+        result = result + ascii_num
     }
-    else if typeof val == "boolean" {
-        @out "boolean"
-    }
-    else if typeof val == "object" {
-        @out "object"
-    }
-
-    # now print the value
-    @out val
+    ret result
 }
 
-# objects are not implemented yet
-# define an object variable 
-#:obj = {
-#    :name = "Stiliyan"
-#    :age = 18
-#    greet: { @out "Hello World" }
-#}
+fib:/num max_index num {
+    :left/num = 1
+    :right/num = 1
 
-if false {
-    @out "here"
-}
-
-if a != b {
-    @out "oof"
-}
-
-# notice "()" are not needed, but can be used to wrap an expression
-else if (true && true) {
-    @out "there"
-}
-
-# function with arguments
-sum: a, b {
-    ret a + b
-}
-
-# for loop
-for i = 0, i <= 10, i++ {
-    @out i
-}
-
-# while loop
-while true {
-    @out "You can't stop me"
-}
-
-# this function prints the type of a value
-printType: val {
-    if typeof val == "string" {
-        @out "string"
-    }
-    else if typeof val == "number" {
-        @out "number"
-    }
-    else if typeof val == "boolean" {
-        @out "boolean"
-    }
-    else if typeof val == "object" {
-        @out "object"
+    for :i/num = 0, i < max_index - 2, i++ {
+        :temp/num = right
+        right = right + left
+        left = temp
     }
 
-    # now print the value
-    @out val
+    ret right
 }
 
-++a
-a++
+@outln "----    FIB (kulang)    ----"
+@outln "----------------------------"
+@outln "@Stiliyan Kushev\n\n"
 
-b--
---b
+@out "Enter number: "
+
+:input/str = (@rline)
+:parsed/num = @str2num input
+
+@outln "Searching fib for number: " + @num2str parsed
+@outln @num2str @fib parsed

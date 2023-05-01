@@ -1,4 +1,5 @@
 const vm = require('node:vm')
+const readline_sync = require('readline-sync')
 const {
     exit_error
 } = require('./cmd')
@@ -27,6 +28,10 @@ const core_sim = new class {
         this.context.functions.set("num2str", this.num2str)
         this.context.functions.set("str2num", this.str2num)
         this.context.functions.set("str2bol", this.str2bol)
+
+        // input
+        this.context.functions.set("rkey", this.rkey)
+        this.context.functions.set("rline", this.rline)
     }
 
     make_f({ name, vars, code_func, ret_type }) {
@@ -67,6 +72,35 @@ const core_sim = new class {
                 value: type
             }
         }
+    }
+
+    // reads key from stdin and returns string
+    get rkey() {
+        return this.make_f({
+            name: 'rkey',
+            vars: [],
+            code_func: function () {
+                const key = readline_sync.keyIn()
+                // note: manual terminal patch required
+                // note: because the lib also prints "\n"
+                process.stdout.write(`\x1b[1A`)
+                process.stdout.write(`\x1b[1C`)
+                return key
+            },
+            ret_type: 'str'
+        })
+    }
+
+    // reads line from stdin and returns string
+    get rline() {
+        return this.make_f({
+            name: 'rline',
+            vars: [],
+            code_func: function () {
+                return readline_sync.question()
+            },
+            ret_type: 'str'
+        })
     }
 
     // prints to the stdout
@@ -192,16 +226,14 @@ const exec_internal = (node, parent) => {
     const vm_context = vm.createContext({
         ...parent,
         // context is empty initially
-        process: process
+        process: process,
+        readline_sync: readline_sync
     })
     const result = vm.runInNewContext(node.code, vm_context)
     return result
 }
 
 module.exports.simulate_ast = ast => {
-    console.dir(ast, { depth: null })
-    console.log('-'.repeat(process.stdout.columns))
-
     const throw_fatal_error = (error, node, parent) => {
         exit_error(`\nerror: ${error}\nat: row: ${node?.location?.line} col: ${node?.location?.col}`)
     }
@@ -394,7 +426,7 @@ module.exports.simulate_ast = ast => {
     }
 
     const read_func = (node, parent) => {
-        if(lookup_function(node, parent, node.name, false)) {
+        if(parent.context.functions.has(node.name)) {
             throw_function_already_declared(node, parent)
         }
         parent.context.functions.set(node.name, node)
@@ -631,8 +663,11 @@ module.exports.simulate_ast = ast => {
             context: opt_context || create_context()
         }
 
+        const was_loop = world.context.flags.has('loop')
+
         for(let node of prog) {
             if(world.context.flags.has('continue')) break
+            if(!world.context.flags.has('loop') && was_loop) break
             if(world.context.flags.has('ret_value')) {
                 return world.context.flags.get('ret_value')
             }

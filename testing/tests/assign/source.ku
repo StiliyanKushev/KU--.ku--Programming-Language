@@ -1,0 +1,7 @@
+:var/str = ""
+var = "1"
+@out var
+var = "2"
+@out var
+var = "3"
+@out var

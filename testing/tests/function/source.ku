@@ -1,0 +1,14 @@
+func:/str {
+    func1:/num {
+        ret 123
+    }
+    func2:/str {
+        ret "Hello"
+    }
+    func3:/str {
+        ret "World"
+    }
+    ret (@num2str @func1) + @func2 + @func3
+}
+
+@outln @func

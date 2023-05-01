@@ -1,0 +1,13 @@
+:space/str = " "
+:number/num = 123
+:var/str = "Hello" + space + (@num2str number) + space + "World!"
+@outln var
+
+:test1/str = "1"
+
+func:/str {
+    :test1/str = "2"
+    @outln test1
+}
+(@func)
+@outln test1

@@ -1,0 +1,9 @@
+:i/num = 0
+:j/num = 0
+
+
+@out @num2str i++
+@out @num2str ++i
+@out @num2str ++i + j
+@out @num2str i++ + ++j
+@out @num2str i + j

@@ -1,7 +1,0 @@
-func:/num n num {
-    if n > 9999 { ret }
-    @out @num2str n
-    @func ++n
-}
-
-@func 1

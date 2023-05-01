@@ -10,6 +10,7 @@ module.exports.help = () => {
     console.log('  -o, --output\t\t\tOutput file path')
     console.log('  -c, --compile\t\t\tCompile to native')
     console.log('  -a, --ast\t\t\tPrint AST')
+    console.log('  -m, --asm\t\t\tPrint ASM')
     process.exit(0)
 }
 
@@ -41,6 +42,8 @@ module.exports.get_options = () => {
                 options.compile = true
             } else if(arg == '-a' || arg == '--ast') {
                 options.ast = true
+            } else if(arg == '-m' || arg == '--asm') {
+                options.asm = true
             } else {
                 this.error(`Invalid option: ${arg}`)
             }
@@ -53,12 +56,16 @@ module.exports.get_options = () => {
     if((options.compile && !options.output) || (!options.compile && options.output)) {
         this.error('Invalid options: --compile and --output must be used together')
     }
+    if(options.asm && !options.compile) {
+        this.error('Invalid options: --asm can only be used with --compile')
+    }
 
     return options
 }
 
 module.exports.print_ast = ast => {
     console.dir(ast, { depth: null })
+    console.log('-'.repeat(process.stdout.columns))
 }
 
 module.exports.error = err => {
@@ -68,5 +75,6 @@ module.exports.error = err => {
 
 module.exports.exit_error = err => {
     console.error(err)
+    // console.trace()
     process.exit(1)
 }

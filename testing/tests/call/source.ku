@@ -1,0 +1,32 @@
+:flag/bol = false
+
+f1:/str {
+    @out "H"
+    f2:/str {
+        @out "e"
+        f4:/str {
+            @out "l"
+            f6:/str {
+                @out "l"
+            }
+            (@f6)
+        }  
+        f5:/str {
+            @out "o"
+        }      
+        (@f4)
+        (@f5)
+    }   
+    f3:/str {
+        @out "!"
+        if flag == false {
+            flag = true
+            (@f1)
+        }
+    }
+
+    (@f2)
+    (@f3)
+}
+
+@f1

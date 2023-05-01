@@ -1,0 +1,24 @@
+for :i/num = 0, i < 10, i++ {
+    while true {
+        if i < 10 {
+            break
+        }
+    }
+
+    if i == 9 { break }
+    if i % 2 == 0 { continue }
+
+    @outln @num2str i
+
+    if i == 5 {
+        while i > 0 {
+            @out @num2str i
+            i--
+        }
+        i = 5
+    }
+}
+
+if 0 > 0 {
+    @outln "BUG"
+}
