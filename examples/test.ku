@@ -1,0 +1,69 @@
+rline:/str {
+    :input/str
+    :new_char/str
+    while true {
+        :key/str = (@rkey)
+        # new line was pressed, line is read.
+        if (?num (+key)) == (?num (+@strcut "\n", 1)) {
+            @out key
+            break
+        }
+        # user deleted
+        else if (?num (+key)) == 127 || (?num (+key)) == 23 {
+            # remove last entry
+            input = @strcut input, (@strlen input) - 1
+
+            # move cursor to the left
+            @out "\x1b[1D \x1b[1D"
+        }
+        # tab is always 4 spaces
+        else if (?num (+key)) == (?num (+@strcut "\t", 1)) {
+            input = input + "    "
+            @out "    "
+        }
+        else {
+            input = input + key
+            @out key
+        }
+    }
+    ret input
+}
+
+str2num:/num text str {
+    :result/num
+    # todo: error checking
+    for :i/num = 0, i < (@strlen text), i++ {
+        :ascii_num/num = ?num (+@strcut (?str (+text) + i), 1)
+        ascii_num = ascii_num - 48
+        for :j/num = i, j < (@strlen text) - 1, j++ {
+            ascii_num = ascii_num * 10
+        }
+        result = result + ascii_num
+    }
+    ret result
+}
+
+fib:/num max_index num {
+    :left/num = 1
+    :right/num = 1
+
+    for :i/num = 0, i < max_index - 2, i++ {
+        :temp/num = right
+        right = right + left
+        left = temp
+    }
+
+    ret right
+}
+
+@outln "----    FIB (kulang)    ----"
+@outln "----------------------------"
+@outln "@Stiliyan Kushev\n\n"
+
+@out "Enter number: "
+
+:input/str = (@rline)
+:parsed/num = @str2num input
+
+@outln "Searching fib for number: " + @num2str parsed
+@outln @num2str @fib parsed

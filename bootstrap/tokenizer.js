@@ -9,7 +9,7 @@ module.exports = reader => {
     // validation functions
     const is_whitespace = ch => ' \t\n'.indexOf(ch) >= 0
     const is_punc       = ch => ':,(){}[]@'.indexOf(ch) >= 0
-    const is_op_char    = ch => '+-*/%=&|<>!'.indexOf(ch) >= 0
+    const is_op_char    = ch => '+-*/%=&|<>!?'.indexOf(ch) >= 0
     const is_id_start   = ch => /[a-z_A-Z]/i.test(ch)
     const is_digit      = ch => /[0-9]/i.test(ch)
     const is_keyword    = wd => keywords.indexOf(' ' + wd + ' ') >= 0
@@ -50,7 +50,9 @@ module.exports = reader => {
             't': '\t',
             'r': '\r',
             'f': '\f',
-            'v': '\v'
+            'v': '\v',
+            '1b': '\x1b'
+            // todo: add more
         }
         return escape_map[ch] || ch
     }
@@ -62,6 +64,11 @@ module.exports = reader => {
             ch = reader.next()
             if(escaped) { str += ch ; escaped = false }
             else if (ch == '\\' && reader.peek() == end) escaped = true
+            else if (ch == '\\' && reader.peek() == 'x') {
+                // special \x1b looking escape
+                reader.next()
+                str += read_as_escaped(reader.next() + reader.next())
+            }
             else if (ch == '\\') str += read_as_escaped(reader.next())
             else if (ch == end) break
             else str += ch

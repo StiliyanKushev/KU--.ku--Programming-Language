@@ -82,7 +82,7 @@ module.exports = tokens => {
             if(!is_punc('(')) return; skip_punc('(')
             if(!is_op('-') && !is_op('+')) return; const op = tokens.next()
             const expr = parse_datatypes() || parse_call()
-            if(!expr || ['bol','str'].includes(expr.type)) return
+            if(!expr) return
             if(!is_punc(')')) return; skip_punc(')')
 
             return {
@@ -146,8 +146,15 @@ module.exports = tokens => {
             const location = tokens.save()
             
             if(is_punc('(') && !left){
-                tokens.next()
-                const exp = parse_atom()
+                // maybe it's "signed"
+                // check first before we skip
+                let exp = parse_signed()
+                if(exp) {
+                    return parse_binary(exp)
+                }
+
+                skip_punc('(')
+                exp = parse_atom()
                 skip_punc(')')
                 return parse_binary(exp)
             }
@@ -157,6 +164,8 @@ module.exports = tokens => {
                         parse_prefix() || 
                         parse_postfix() || 
                         parse_datatypes() ||
+                        parse_pointer() ||
+                        parse_cast() ||
                         parse_signed()
                 if(!left)       return 
                 if(!is_op())    return
@@ -179,6 +188,8 @@ module.exports = tokens => {
                     parse_prefix() || 
                     parse_postfix() || 
                     parse_datatypes() || 
+                    parse_pointer() ||
+                    parse_cast() ||
                     parse_signed(), PRECEDENCE[op]),
                 location : location
             }, prev_prec)
@@ -260,8 +271,8 @@ module.exports = tokens => {
 
             const statement = 
                 parse_binary() || 
-                parse_datatypes() || 
                 parse_signed() ||
+                parse_datatypes() || 
                 parse_call()
 
             const body = parse_body()
@@ -303,8 +314,8 @@ module.exports = tokens => {
 
             const statement = 
                 parse_binary() || 
-                parse_datatypes() || 
                 parse_signed() ||
+                parse_datatypes() || 
                 parse_call()
 
             // return if it's not a boolean or a boolean binary
@@ -337,8 +348,8 @@ module.exports = tokens => {
 
             const statement = 
                 parse_binary() || 
-                parse_datatypes() || 
                 parse_signed() ||
+                parse_datatypes() || 
                 parse_call()
 
             skip_punc(',')
@@ -417,15 +428,55 @@ module.exports = tokens => {
         })
     }
 
+    const parse_pointer = () => {
+        return parse_handler(reject => {
+            const location = tokens.save()
+            if(!is_op('&')) return;   skip_op('&')
+            const name = skip_var().value
+
+            return {
+                type: 'pointer',
+                name: name,
+                location: location
+            }
+        })
+    }
+
+    const parse_cast = () => {
+        return parse_handler(reject => {
+            const location = tokens.save()
+            if(!is_op('?')) return;   skip_op('?')
+            if(!is_type())  return;   
+            const type = skip_type()
+
+            const value = 
+                parse_binary() || 
+                parse_signed() ||
+                parse_datatypes() || 
+                parse_call() ||
+                parse_cast() ||
+                parse_pointer()
+
+            return {
+                type: 'cast',
+                value: value,
+                cast_type: type,
+                location: location
+            }
+        })
+    }
+
     const parse_atom = () => {
         try {
             return (
                 parse_binary() ||
+                parse_signed() ||
                 parse_prefix() ||
                 parse_postfix() ||
                 parse_call() ||
                 parse_datatypes() || 
-                parse_signed() ||
+                parse_pointer() ||
+                parse_cast() ||
                 undefined
             )
         } catch { unexpected() }
@@ -447,6 +498,8 @@ module.exports = tokens => {
                 parse_function() || 
                 parse_assign() ||
                 parse_declare() ||
+                parse_pointer() ||
+                parse_cast() ||
                 parse_datatypes(null, false) ||  
                 unexpected()
             )

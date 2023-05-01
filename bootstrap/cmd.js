@@ -75,5 +75,6 @@ module.exports.error = err => {
 
 module.exports.exit_error = err => {
     console.error(err)
+    // console.trace()
     process.exit(1)
 }

@@ -1,4 +1,5 @@
 const vm = require('node:vm')
+const readline_sync = require('readline-sync')
 const {
     exit_error
 } = require('./cmd')
@@ -27,6 +28,10 @@ const core_sim = new class {
         this.context.functions.set("num2str", this.num2str)
         this.context.functions.set("str2num", this.str2num)
         this.context.functions.set("str2bol", this.str2bol)
+
+        // input
+        this.context.functions.set("rkey", this.rkey)
+        this.context.functions.set("rline", this.rline)
     }
 
     make_f({ name, vars, code_func, ret_type }) {
@@ -67,6 +72,35 @@ const core_sim = new class {
                 value: type
             }
         }
+    }
+
+    // reads key from stdin and returns string
+    get rkey() {
+        return this.make_f({
+            name: 'rkey',
+            vars: [],
+            code_func: function () {
+                const key = readline_sync.keyIn()
+                // note: manual terminal patch required
+                // note: because the lib also prints "\n"
+                process.stdout.write(`\x1b[1A`)
+                process.stdout.write(`\x1b[1C`)
+                return key
+            },
+            ret_type: 'str'
+        })
+    }
+
+    // reads line from stdin and returns string
+    get rline() {
+        return this.make_f({
+            name: 'rline',
+            vars: [],
+            code_func: function () {
+                return readline_sync.question()
+            },
+            ret_type: 'str'
+        })
     }
 
     // prints to the stdout
@@ -192,7 +226,8 @@ const exec_internal = (node, parent) => {
     const vm_context = vm.createContext({
         ...parent,
         // context is empty initially
-        process: process
+        process: process,
+        readline_sync: readline_sync
     })
     const result = vm.runInNewContext(node.code, vm_context)
     return result
