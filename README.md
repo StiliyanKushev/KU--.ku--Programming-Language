@@ -10,9 +10,6 @@ KU (.ku) Programming Language
 
 -- inputs --
 ------------
-
-@noecho - disables echo from stdin to stdout
-@onecho - enables echo from stdin to stdout
 @rkey - reads key from stdin, returns string
 @rline - reads line from stdin, returns string
 
@@ -66,3 +63,13 @@ struct person {
 &my_bol
 &my_strcut
 &my_number
+
+-- syscalls --
+--------------
+@syscall - takes pointer to array filled with pointers for each argument.
+
+-- memory edits --
+------------------
+
+::&lang = 123
+::486018451 = 123
