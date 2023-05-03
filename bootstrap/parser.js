@@ -14,14 +14,14 @@ module.exports = tokens => {
     // token validating functions
     const is_bool_expr = expr => expr.type == 'bol' || (expr.type == 'binary' && is_bool_op(expr.operator))
     const is_bool_op   = op => ' && || == > < <= >= != '.indexOf(' ' + op + ' ') >= 0 
-    const is_val       = cc => ' num str var '.indexOf(' ' + cc.type + ' ') >= 0
+    const is_val       = cc => ' num str var chr '.indexOf(' ' + cc.type + ' ') >= 0
     const is_var       = () => { let tok = tokens.peek(); return tok && tok.type == 'var' }
     const is_str       = () => { let tok = tokens.peek(); return tok && tok.type == 'str' }
     const is_num       = () => { let tok = tokens.peek(); return tok && tok.type == 'num' }
     const is_punc      = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) }
     const is_kw        = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) }
     const is_op        = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) }
-    const is_type      = () => is_kw('num') || is_kw('str') || is_kw('bol')
+    const is_type      = () => is_kw('num') || is_kw('str') || is_kw('bol') || is_kw('chr')
 
     // token skipping functions
     const skip_var    = () => is_var() ? tokens.next() : tokens.croak('Expecting variable name:')
@@ -98,14 +98,32 @@ module.exports = tokens => {
         return parse_handler(reject => {
             const location = tokens.save()
             if(!is_var())       return; const name = skip_var()
-            if(!is_op('='))     return
-
-            skip_op('=')
+            if(!is_op('='))     return; skip_op('=')
 
             return {
                 type: 'var',
                 mode: 'assign',
                 name: name.value,
+                value: parse_atom(),
+                location: location
+            }
+        })
+    }
+
+    const parse_memory_assign = () => {
+        return parse_handler(reject => {
+            const location    = tokens.save()
+            if(!is_punc(':'))   return; skip_punc(':')
+            if(!is_punc(':'))   return; skip_punc(':')
+            const address     = parse_atom()
+            if(!is_op('/'))     return; skip_op('/')
+            if(!is_type())      return; const as_type = skip_type()
+            if(!is_op('='))     return; skip_op('=')
+
+            return {
+                type: 'massign',
+                address: address,
+                as_type: as_type,
                 value: parse_atom(),
                 location: location
             }
@@ -173,6 +191,20 @@ module.exports = tokens => {
 
             if(!is_op()) return left
             if(tokens.peek().value == '=') return parse_assign()
+
+            // specific to the memory assign syntax
+            const is_slash_type = () => {
+                return parse_handler(reject => {
+                    if(!is_op('/'))     return; skip_op('/')
+                    if(!is_type())      return;
+                    reject()
+                    return true
+                })
+            }
+
+            if(is_slash_type()) {
+                return left
+            }
 
             const op = tokens.peek().value
 
@@ -496,6 +528,7 @@ module.exports = tokens => {
                 parse_while() ||
                 parse_for() ||
                 parse_function() || 
+                parse_memory_assign() ||
                 parse_assign() ||
                 parse_declare() ||
                 parse_pointer() ||

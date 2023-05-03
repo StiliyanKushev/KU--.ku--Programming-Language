@@ -1,5 +1,5 @@
 module.exports = reader => {
-    var keywords = ' if else for while true false ret break continue num str bol '
+    var keywords = ' if else for while true false ret break continue num str bol chr '
 
     // navigation functions
     const next = () => read_next()
@@ -33,6 +33,8 @@ module.exports = reader => {
         let id = read_while(ch => is_id_start(ch) || is_digit(ch))
         return { type: is_keyword(id) ? 'kw' : 'var', value: id }
     }
+    // returns char token
+    const read_char = () => ({ type: 'chr', value: read_escaped('\'') })
 
     // returns string token
     const read_string = () => ({ type: 'str', value: read_escaped('"') })
@@ -83,6 +85,7 @@ module.exports = reader => {
         let ch = reader.peek()
         if (ch == '#') { skip_comment(); return read_next() }
         if (ch == '"') return read_string()
+        if (ch == '\'') return read_char()
         if (is_digit(ch)) return read_number() 
         if (is_id_start(ch)) return read_id()
         if (is_punc(ch)) return { type: 'punc', value: reader.next() }

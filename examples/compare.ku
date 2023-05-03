@@ -1,0 +1,53 @@
+# include "kor"
+
+# strcmp:/bol lstr str, rstr str {
+#     if (@strlen lstr) != (@strlen rstr) {
+#         ret false
+#     }
+    
+#     for :i/num = 0, i < (@strlen lstr), i++ {
+#         if (?num (+lstr) + i) != (?num (+rstr) + i) {
+#             ret false
+#         }
+#     }
+
+#     ret true
+# }
+
+# :my_var/chr = '0'
+# :my_other_var/chr = '\n'
+# :my_other_other_var/chr = 'A'
+# :my_other_other_other_var/chr = my_other_var
+
+chr2str:/str ch chr {
+    :to_str/str = ""
+    ::(+to_str)/chr = ch
+    ret to_str
+}
+
+:my_var/chr = ?chr 48
+:my_bar/chr = ?chr 50
+::&my_var /chr = my_bar
+my_bar = ?chr 49
+
+@outln "address is: " + @num2str &my_var
+@outln @chr2str my_var
+@outln @chr2str my_bar
+
+# todo: chr support in all places
+# todo: read_binary, read_cast, read_pointer, etc
+
+# :lstr/str = "Hello"
+# :rstr/str = "Hello"
+# ::(+rstr)/chr = my_other_other_other_var
+
+# @outln rstr
+# @outln lstr
+
+# :compare/bol = @strcmp lstr, rstr
+
+# if compare == true {
+#     @outln "They are the same!"
+# } else {
+#     @outln "They are not the same!"
+# }

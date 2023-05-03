@@ -84,6 +84,7 @@ const types_offsets = {
     'num': 4,
     'bol': 4,
     'str': 4, // hold address of string
+    'chr': 1,
 }
 
 // unique global counters used as id's
@@ -213,18 +214,11 @@ module.exports.generate_asm = ast => {
             const hexCode = asciiCode.toString(16)
             arr.push('0x' + hexCode)
         }
+        if(string.length == 0) {
+            arr.push('0x0')
+        }
         arr.push('0x0')
         return arr
-    }
-
-    const hardcoded_strings = new Map()
-
-    const get_cached_hardcoded_string = (hex) => {
-        return hardcoded_strings.get(hex)
-    }
-
-    const set_cached_hardcoded_string = (label, hex) => {
-        hardcoded_strings.set(hex, label)
     }
 
     const throw_fatal_error = (error, node, parent) => {
@@ -313,10 +307,19 @@ module.exports.generate_asm = ast => {
             `not implemented -> ${node.type}`, node, parent)
     }
 
+    const throw_memory_assign_not_a_number = (node, parent) => {
+        throw_fatal_error(
+            `cannot assign to non-numeric memory address`, node, parent)
+    }
+
     const type_default_value = (parent, value_type) => {
         if(value_type == 'num') return read_value({
             type: 'num',
             value: 0
+        }, parent, value_type)
+        if(value_type == 'chr') return read_value({
+            type: 'chr',
+            value: ""
         }, parent, value_type)
         if(value_type == 'bol') return read_value({
             type: 'bol',
@@ -426,19 +429,31 @@ module.exports.generate_asm = ast => {
 
         // note: opt_type is given when it's not a simple type (ex: str, num, bol)
         const check_value_type = opt_type => {
+            let invalid = true
+            let validated = false
+
             if(opt_type && opt_value_type) {
-                let invalid = true
+                validated = true
                 for(let ovt of opt_value_type) {
                     if(opt_type == ovt) {
                         invalid = false
                         break
                     }
                 }
-                if (invalid) {
-                    throw_invalid_value_type(node, parent)
+            }
+            if(!opt_type && node.type && opt_value_type) {
+                validated = true
+                for(let ovt of opt_value_type) {
+                    if(node.type == ovt) {
+                        invalid = false
+                        break
+                    }
                 }
             }
-            if(!opt_type && node.type != opt_value_type) {
+            if(!validated) {
+                invalid = false
+            }
+            if (invalid) {
                 throw_invalid_value_type(node, parent)
             }
         }
@@ -446,33 +461,41 @@ module.exports.generate_asm = ast => {
         if(node.type == 'num') {
             check_value_type(node.type)
             return {
+                immediate: true,
                 type: node.type,
                 write_all: () => {
                     write_code(`;; num`)
                     write_code(`mov eax, ${node.value}`)
                 }
             }
+        } else if(node.type == 'chr') {
+            check_value_type(node.type)
+            let char_hex = util_string_to_hex_arr(node.value)[0]
+            return {
+                immediate: true,
+                type: node.type,
+                write_all: () => {
+                    write_code(`;; chr`)
+                    write_code(`mov eax, ${char_hex}`)
+                }
+            }
         } else if(node.type == 'str') {
             check_value_type(node.type)
             let string_hex = util_string_to_hex_arr(node.value).join(', ')
-            let cached_label = get_cached_hardcoded_string(string_hex)
-            let string_label = cached_label || create_label()
-            if(!cached_label) {
-                set_cached_hardcoded_string(string_label, string_hex)
-            }
+            let string_label = create_label()
             return {
+                immediate: true,
                 type: node.type,
                 write_all: () => {
                     write_code(`;; str`)
-                    if(!cached_label) {
-                        write_data(`${string_label}: db ${string_hex}`)
-                    }
+                    write_data(`${string_label}: db ${string_hex}`)
                     write_code(`mov eax, ${string_label}`)
                 }
             }
         } else if(node.type == 'bol') {
             check_value_type(node.type)
             return {
+                immediate: true,
                 type: node.type,
                 write_all: () => {
                     write_code(`;; bol`)
@@ -1110,16 +1133,24 @@ module.exports.generate_asm = ast => {
             type: node.cast_type.value,
             write_all: () => {
                 write_code(`;; cast var ${node.cast_type.value}`)
-                read_value(node.value, parent, 'num').write_all()
+                const value = read_value(node.value, parent, ['num', 'chr', 'str'])
+                value.write_all()
+
+                if(value.immediate) {
+                    // if the value is immediate (hardcoded)
+                    // we don't treat it as an address, but rather 
+                    // as the value at the supposed address itself.
+                    return
+                }
 
                 if(node.cast_type.value == 'str') {
                     // strings are already pointer, so we basically
                     // ignore that, but we return as type str so 
                     // the compiler now thinks this address is a string
+                    return
                 }
-                else {
-                    write_code(`mov eax, [eax]`)
-                }
+
+                write_code(`mov eax, [eax]`)
             }
         }
     }
@@ -1153,7 +1184,19 @@ module.exports.generate_asm = ast => {
                     write_code(`;; --- declare "${name}" [${type}] (${offset}) --- ;;`)
                     write_code(`sub esp, ${type_size}`)
                     com_value.write_all()
-                    write_code(`mov [ebp-${offset}], eax`)
+
+                    // write to stack aligned based on type_size
+                    if(type_size == 1) {
+                        write_code(`mov byte [ebp-${offset}], al`)
+                    } else if(type_size == 2) {
+                        write_code(`mov word [ebp-${offset}], ax`)
+                    } else if(type_size == 3) {
+                        // todo: probably not important unless
+                        // todo: for some reason I have a type of size 3 bytes
+                    } else if(type_size == 4) {
+                        write_code(`mov [ebp-${offset}], eax`)
+
+                    }
                 }
             }
         }
@@ -1162,6 +1205,7 @@ module.exports.generate_asm = ast => {
             const offset = found_var.ebp_offset
             const name = found_var.value.name
             const type = found_var.value.type
+            const type_size = types_offsets[type]
 
             return {
                 name, type, offset,
@@ -1202,9 +1246,47 @@ module.exports.generate_asm = ast => {
                     }
 
                     execute_in_above_scope(() => {
-                        write_code(`mov [ebp-${offset}], eax`)
+                        // write to stack aligned based on type_size
+                        if(type_size == 1) {
+                            write_code(`mov byte [ebp-${offset}], al`)
+                        } else if(type_size == 2) {
+                            write_code(`mov word [ebp-${offset}], ax`)
+                        } else if(type_size == 3) {
+                            // todo: probably not important unless
+                            // todo: for some reason I have a type of size 3 bytes
+                        } else if(type_size == 4) {
+                            write_code(`mov [ebp-${offset}], eax`)
+                        }
                     }, found_var.lookup_index)
                 }
+            }
+        }
+    }
+
+    const read_memory_assign = (node, parent) => {
+        const address_value = read_value(node.address, parent)
+        if(address_value.type != 'num') {
+            throw_memory_assign_not_a_number(node, parent)
+        }
+
+        return {
+            write_all: () => {
+                read_value(node.value, parent).write_all()
+                write_code(`push ebx`)
+                write_code(`mov ebx, eax`)
+                address_value.write_all()
+                const size = types_offsets[node.as_type.value]
+                if(size == 1) {
+                    write_code(`mov byte [eax], bl`)
+                } else if(size == 2) {
+                    write_code(`mov word [eax], bx`)
+                } else if(size == 3) {
+                    // todo: probably not important unless
+                    // todo: for some reason I have a type of size 3 bytes
+                } else if(size == 4) {
+                    write_code(`mov [eax], ebx`)
+                }
+                write_code(`pop ebx`)
             }
         }
     }
@@ -1505,6 +1587,8 @@ module.exports.generate_asm = ast => {
                 read_prefix(node, world).write_all()
             } else if(node.type == 'ret') {
                 return read_ret(node, world).write_all()
+            } else if(node.type == 'massign') {
+                read_memory_assign(node, world).write_all()
             } else if(node.type == 'kw' && node.value == 'break') {
                 return read_break(node, world).write_all()
             } else if(node.type == 'kw' && node.value == 'continue') {
