@@ -3,10 +3,11 @@ const os    = require('os')
 const path  = require('path')
 const cp    = require('child_process')
 const {
-    exit_error
+    exit_error, 
+    get_source_code
 } = require('./cmd')
 
-module.exports.compile_asm = (asm, options) => {
+module.exports.compile_asm = ([asm, options]) => {
     const output = options.output
 
     if(options.asm) {
@@ -30,9 +31,10 @@ module.exports.compile_asm = (asm, options) => {
     cp.execSync(link_cmd)           ; console.log(link_cmd)
     cp.execSync(chmod_cmd)          ; console.log(chmod_cmd)
     fs.rmSync(working_dir, { recursive: true, force: true })
+
+    console.log('-'.repeat(process.stdout.columns))
     try {cp.execFileSync(exe_path)} 
     catch (err) {console.log(err.stderr.toString())}
-    console.log('-'.repeat(process.stdout.columns))
 }
 
 // ------------------------------------------------------------------------ //
@@ -95,7 +97,14 @@ const counters = {
 // simple function to create a unique label name
 let _label_inc = 0, create_label = () => '__' + (++_label_inc).toFixed(10).replace('.', '_')
 
-module.exports.generate_asm = ast => {
+module.exports.generate_asm = (ast, options) => {
+    // current working file path to the file we're parsing at any given moment
+    let working_fd = options.source
+
+    // change cwd relative to the file we parse
+    let global_old_working_directory = process.cwd()
+    process.chdir(path.parse(working_fd).dir)
+
     // list of types that require their memory address
     // to be freed right before the scope dies.
     // each one has a function that free's the data from eax.
@@ -107,7 +116,7 @@ module.exports.generate_asm = ast => {
             write_code(';; free str')
             write_code('mov ebx, eax')
             read_call_function({
-                name: 'strlen',
+                name: 'inner_strlen',
                 args: [{
                     type: 'override',
                     override: {
@@ -222,7 +231,10 @@ module.exports.generate_asm = ast => {
     }
 
     const throw_fatal_error = (error, node, parent) => {
-        exit_error(`\nerror: ${error}\nat: row: ${node?.location?.line} col: ${node?.location?.col}`)
+        exit_error('\n'
+        + `error: ${error}\n`
+        + `at: ${path.join(process.cwd(), path.parse(working_fd).base)}\n`
+        + `at: row: ${node?.location?.line} col: ${node?.location?.col}\n`)
     }
 
     const throw_variable_not_exist = (node, parent) => {
@@ -310,6 +322,11 @@ module.exports.generate_asm = ast => {
     const throw_memory_assign_not_a_number = (node, parent) => {
         throw_fatal_error(
             `cannot assign to non-numeric memory address`, node, parent)
+    }
+
+    const throw_include_file_not_found = (node, parent) => {
+        throw_fatal_error(
+            `include file not found`, node, parent)
     }
 
     const type_default_value = (parent, value_type) => {
@@ -897,22 +914,22 @@ module.exports.generate_asm = ast => {
             req_type = ['bol']
         } else if(node.operator == '<') {
             type = 'bol'
-            req_type = ['num']
+            req_type = ['num', 'chr']
         } else if(node.operator == '>') {
             type = 'bol'
-            req_type = ['num']
+            req_type = ['num', 'chr']
         } else if(node.operator == '<=') {
             type = 'bol'
-            req_type = ['num']
+            req_type = ['num', 'chr']
         } else if(node.operator == '>=') {
             type = 'bol'
-            req_type = ['num']
+            req_type = ['num', 'chr']
         } else if(node.operator == '==') {
             type = 'bol'
-            req_type = ['num', 'bol']
+            req_type = ['num', 'bol', 'chr']
         } else if(node.operator == '!=') {
             type = 'bol'
-            req_type = ['num', 'bol']
+            req_type = ['num', 'bol', 'chr']
         }
 
         // we may or may not need a predefined
@@ -1133,10 +1150,10 @@ module.exports.generate_asm = ast => {
             type: node.cast_type.value,
             write_all: () => {
                 write_code(`;; cast var ${node.cast_type.value}`)
-                const value = read_value(node.value, parent, ['num', 'chr', 'str'])
+                const value = read_value(node.value, parent, ['num', 'chr', 'str', 'bol'])
                 value.write_all()
 
-                if(value.immediate) {
+                if(node.immediate) {
                     // if the value is immediate (hardcoded)
                     // we don't treat it as an address, but rather 
                     // as the value at the supposed address itself.
@@ -1150,7 +1167,26 @@ module.exports.generate_asm = ast => {
                     return
                 }
 
-                write_code(`mov eax, [eax]`)
+                const type_size = types_offsets[node.cast_type.value]
+
+                if(type_size == 1) {
+                    write_code(`push ebx`)
+                    write_code(`mov ebx, eax`)
+                    write_code(`xor eax, eax`)
+                    write_code(`mov byte al, [ebx]`)
+                    write_code(`pop ebx`)
+                } else if(type_size == 2) {
+                    write_code(`push ebx`)
+                    write_code(`mov ebx, eax`)
+                    write_code(`xor eax, eax`)
+                    write_code(`mov word ax, [ebx]`)
+                    write_code(`pop ebx`)
+                } else if(type_size == 3) {
+                    // todo: probably not important unless
+                    // todo: for some reason I have a type of size 3 bytes
+                } else if(type_size == 4) {
+                    write_code(`mov eax, [eax]`)
+                }
             }
         }
     }
@@ -1562,6 +1598,32 @@ module.exports.generate_asm = ast => {
         }
     }
 
+    const read_include = (node, parent) => {
+        return {
+            write_all: () => {
+                const old_wd = process.cwd()
+                const old_fd = working_fd
+
+                // resolved fd relative to the currently working fd
+                const fd_resolved = path.resolve(node.fd.value)
+
+                if(!fs.existsSync(fd_resolved)) {
+                    throw_include_file_not_found(node, parent)
+                }
+
+                working_fd = fd_resolved
+
+                const new_raw = get_source_code(working_fd)
+                const new_ast = options.parse_ast_from_buffer(new_raw)
+                read_scope(new_ast.prog, parent, parent.context)
+                
+                // revert to old working directory
+                process.chdir(old_wd)
+                working_fd = old_fd
+            }
+        }
+    }
+
     const read_scope = (prog, opt_parent, opt_context) => {
         const world = {
             parent: opt_parent,
@@ -1585,6 +1647,8 @@ module.exports.generate_asm = ast => {
                 read_postfix(node, world).write_all()
             } else if(node.type == 'prefix') {
                 read_prefix(node, world).write_all()
+            } else if(node.type == 'include') {
+                read_include(node, world).write_all()
             } else if(node.type == 'ret') {
                 return read_ret(node, world).write_all()
             } else if(node.type == 'massign') {
@@ -1607,14 +1671,12 @@ module.exports.generate_asm = ast => {
             this.parent = undefined
             this.context = create_context()
 
+            this.context.functions.set("syscall", this.syscall)
+
             // strings
-            this.context.functions.set("strlen", this.strlen)
+            this.context.functions.set("inner_strlen", this.inner_strlen)
             this.context.functions.set("strapnd", this.strapnd)
             this.context.functions.set("strcut", this.strcut)
-
-            // stdio 
-            this.context.functions.set("out", this.out)
-            this.context.functions.set("outln", this.outln)
     
             // cast 
             this.context.functions.set("bol2str", this.bol2str)
@@ -1652,6 +1714,51 @@ module.exports.generate_asm = ast => {
             }, this)
             func_def.write_all()
             return func_def
+        }
+
+        get syscall() {
+            return this.make_func({
+                name: 'syscall',
+                ret_type: 'num',
+                args: [
+                    this.make_arg('arg_eax', 'num'),
+                    this.make_arg('arg_ebx', 'num'),
+                    this.make_arg('arg_ecx', 'num'),
+                    this.make_arg('arg_edx', 'num'),
+                    this.make_arg('arg_esi', 'num'),
+                    this.make_arg('arg_edi', 'num'),
+                    this.make_arg('arg_ebp', 'num'),
+                ],
+                write_internal: (world, data) => {
+                    write_code(`push ebp`)
+                    write_code(`push edi`)
+                    write_code(`push esi`)
+                    
+                    read_value({ type: 'var', value: 'arg_edi' }, world).write_all()
+                    write_code(`mov edi, eax`)
+                    read_value({ type: 'var', value: 'arg_esi' }, world).write_all()
+                    write_code(`mov esi, eax`)
+                    read_value({ type: 'var', value: 'arg_edx' }, world).write_all()
+                    write_code(`mov edx, eax`)
+                    read_value({ type: 'var', value: 'arg_ecx' }, world).write_all()
+                    write_code(`mov ecx, eax`)
+                    read_value({ type: 'var', value: 'arg_ebx' }, world).write_all()
+                    write_code(`mov ebx, eax`)
+                    read_value({ type: 'var', value: 'arg_eax' }, world).write_all()
+                    write_code(`push eax`)
+                    read_value({ type: 'var', value: 'arg_ebp' }, world).write_all()
+                    write_code(`mov ebp, eax`)
+                    write_code(`pop eax`)
+
+                    write_code(`int 0x80`)
+
+                    write_code(`pop esi`)
+                    write_code(`pop edi`)
+                    write_code(`pop ebp`)
+
+                    write_code(`jmp ${data.label_ret_func}`)
+                }
+            })
         }
 
         get rkey() {
@@ -1771,11 +1878,11 @@ module.exports.generate_asm = ast => {
             })
         }
     
-        get strlen() {
+        get inner_strlen() {
             const loop_start = create_label()
             const loop_end = create_label()
             return this.make_func({
-                name: 'strlen',
+                name: 'inner_strlen',
                 ret_type: 'num',
                 args: [ this.make_arg('data', 'str') ],
                 write_internal: (_, data) => {
@@ -1949,7 +2056,7 @@ module.exports.generate_asm = ast => {
                         value_type: { value: 'num' },
                         value: {
                             type: 'call',
-                            name: 'strlen',
+                            name: 'inner_strlen',
                             args: [{
                                 type: 'var',
                                 value: 'l'
@@ -1964,7 +2071,7 @@ module.exports.generate_asm = ast => {
                         value_type: { value: 'num' },
                         value: {
                             type: 'call',
-                            name: 'strlen',
+                            name: 'inner_strlen',
                             args: [{
                                 type: 'var',
                                 value: 'r'
@@ -2169,53 +2276,6 @@ module.exports.generate_asm = ast => {
                 }
             })
         }
-
-        get out() {
-            return this.make_func({
-                name: 'out',
-                ret_type: 'bol',
-                args: [ this.make_arg('data', 'str') ],
-                write_internal: world => {
-                    read_call_function({
-                        name: 'strlen',
-                        args: [{
-                            type: 'var',
-                            value: 'data',
-                        }],
-                    }, world).write_all()
-                    write_code('mov edx, eax')
-                    write_code(`mov eax, [ebp + 8]`)
-                    write_code('mov ecx, eax')
-                    write_code('mov eax, 4')
-                    write_code('mov ebx, 1')
-                    write_code('int 0x80')
-                }
-            })
-        }
-
-        get outln() {
-            return this.make_func({
-                name: 'outln',
-                ret_type: 'bol',
-                args: [ this.make_arg('data', 'str') ],
-                write_internal: world => {
-                    read_call_function({
-                        name: 'out',
-                        args: [{
-                            type: 'var',
-                            value: 'data',
-                        }],
-                    }, world).write_all()
-                    read_call_function({
-                        name: 'out',
-                        args: [{
-                            type: 'str',
-                            value: '\n',
-                        }],
-                    }, world).write_all()
-                }
-            })
-        }
         
         get str2num() {
             return this.make_func({
@@ -2343,5 +2403,9 @@ module.exports.generate_asm = ast => {
 
     const program_scope = read_scope(ast.prog, core_com)
     free_set_context(program_scope)
-    return asm_final()
+
+    // revert back the cwd to original
+    process.chdir(global_old_working_directory)
+
+    return [asm_final(), options]
 }

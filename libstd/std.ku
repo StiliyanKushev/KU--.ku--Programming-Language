@@ -1,0 +1,96 @@
+#    string functions    #
+# -----------------------#
+
+strlen:/num text str {
+    :i/num = 0
+    while true {
+        if (!num ?chr (+text) + i) == 0 {
+            ret i
+        }
+        i++
+    }
+}
+
+strcmp:/bol lstr str, rstr str {
+    :lstrlen/num = (@strlen lstr)
+
+    if lstrlen != (@strlen rstr) {
+        ret false
+    }
+    
+    for :i/num = 0, i < lstrlen, i++ {
+        if (?chr (+lstr) + i) != (?chr (+rstr) + i) {
+            ret false
+        }
+    }
+
+    ret true
+}
+
+#    parser functions    #
+# -----------------------#
+
+chr2str:/str ch chr {
+    :to_str/str = ""
+    ::(+to_str)/chr = ch
+    ret to_str
+}
+
+bol2str:/str bl bol {
+    if bl {
+        ret "true"
+    }
+    ret "false"
+}
+
+str2num:/num text str {
+    :textlen/num = @strlen text
+    :result/num
+    :si/num = 0
+    :neg/bol
+    
+    if (?chr (+@strcut text, 1)) == '-' {
+        si = 1
+        neg = true
+    }
+    else if (?chr (+@strcut text, 1)) == '+' {
+        si = 1
+    }
+    
+    for :i/num = si, i < textlen, i++ {
+        :ascii_num/num = !num ?chr (+@strcut (?str (+text) + i), 1)
+        ascii_num = ascii_num - 48
+        for :j/num = i, j < textlen - 1, j++ {
+            ascii_num = ascii_num * 10
+        }
+        result = result + ascii_num
+    }
+
+    if si == 1 && result == 0 {
+        # todo: error handling
+    }
+
+    if neg {
+        result = result * -1
+    }
+
+    ret result
+}
+
+#    stdio functions     #
+# -----------------------#
+
+out:/bol output str {
+    @syscall 4, 1, (+output), (@strlen output), 0, 0, 0
+}
+
+outln:/bol output str {
+    @out output + "\n"
+}
+
+#    syscall functions     #
+# -------------------------#
+
+exit:/bol errno num {
+    @syscall 1, errno, 0, 0, 0, 0, 0
+}

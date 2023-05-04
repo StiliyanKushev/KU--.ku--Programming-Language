@@ -29,6 +29,7 @@ module.exports = tokens => {
     const skip_kw     = kw => is_kw(kw) ? tokens.next() : tokens.croak('Expecting keyword: \'' + kw + '\'')
     const skip_op     = op => is_op(op) ? tokens.next() : tokens.croak('Expecting operator: \'' + op + '\'')
     const skip_type   = () => is_type() ? tokens.next() : tokens.croak('Expecting type name:')
+    const skip_str    = () => is_str() ? tokens.next() : tokens.croak('Expecting string:')
 
     // helper functions 
     const unexpected = () => tokens.croak('Unexpected token: ' + JSON.stringify(tokens.peek()))
@@ -67,9 +68,9 @@ module.exports = tokens => {
             if(is_val(current)) return { location, ...current }
             if(current.value == 'true' || current.value == 'false') {
                 return { 
-                    type: 'bol', 
-                    value: current.value == 'true', 
-                    location: location 
+                    type        : 'bol', 
+                    value       : current.value == 'true', 
+                    location    : location 
                 }
             }
         })
@@ -86,10 +87,10 @@ module.exports = tokens => {
             if(!is_punc(')')) return; skip_punc(')')
 
             return {
-                type: 'signed',
-                op: op,
-                value: expr,
-                location: location
+                type        : 'signed',
+                op          : op,
+                value       : expr,
+                location    : location
             }
         })
     }
@@ -101,11 +102,11 @@ module.exports = tokens => {
             if(!is_op('='))     return; skip_op('=')
 
             return {
-                type: 'var',
-                mode: 'assign',
-                name: name.value,
-                value: parse_atom(),
-                location: location
+                type        : 'var',
+                mode        : 'assign',
+                name        : name.value,
+                value       : parse_atom(),
+                location    : location
             }
         })
     }
@@ -121,11 +122,11 @@ module.exports = tokens => {
             if(!is_op('='))     return; skip_op('=')
 
             return {
-                type: 'massign',
-                address: address,
-                as_type: as_type,
-                value: parse_atom(),
-                location: location
+                type        : 'massign',
+                address     : address,
+                as_type     : as_type,
+                value       : parse_atom(),
+                location    : location
             }
         })
     }
@@ -139,22 +140,22 @@ module.exports = tokens => {
             const location = tokens.save()
 
             if(!is_op('=')) return {
-                type: 'var',
-                mode: 'declare',
-                name: name.value,
-                value: undefined,
-                value_type: value_type
+                type        : 'var',
+                mode        : 'declare',
+                name        : name.value,
+                value       : undefined,
+                value_type  : value_type
             }
 
             skip_op('=')
 
             return {
-                type: 'var',
-                mode: 'declare',
-                name: name.value,
-                value: parse_atom(),
-                value_type: value_type,
-                location: location
+                type        : 'var',
+                mode        : 'declare',
+                name        : name.value,
+                value       : parse_atom(),
+                value_type  : value_type,
+                location    : location
             }
         })
     }
@@ -250,12 +251,12 @@ module.exports = tokens => {
             if(!ALREADY_INSIDE_FUNCTION) INSIDE_FUNCTION = false
 
             return {
-                type: 'func',
-                vars: vars,
-                name: name,
-                body: body,
-                location: location,
-                ret_type: ret_type
+                type        : 'func',
+                vars        : vars,
+                name        : name,
+                body        : body,
+                location    : location,
+                ret_type    : ret_type
             }
         })
     }
@@ -274,10 +275,10 @@ module.exports = tokens => {
             }, parse_atom, ',')
 
             return {
-                type: 'call',
-                name: name,
-                args: args,
-                location: location
+                type        : 'call',
+                name        : name,
+                args        : args,
+                location    : location
             }
         }) 
     }
@@ -289,9 +290,9 @@ module.exports = tokens => {
             if(!is_kw('ret')) return; skip_kw('ret')
             const location = tokens.save()
             return {
-                type: 'ret',
-                value: parse_atom(),
-                location: location
+                type        : 'ret',
+                value       : parse_atom(),
+                location    : location
             }
         })
     }
@@ -328,9 +329,9 @@ module.exports = tokens => {
             if(is_punc('{')) {
                 const body = parse_body()
                 return {
-                    type: 'else',
-                    body: body,
-                    location: location
+                    type        : 'else',
+                    body        : body,
+                    location    : location
                 }
             }
 
@@ -408,6 +409,17 @@ module.exports = tokens => {
         })
     }
 
+    const parse_include = () => {
+        if(!is_kw('include')) return; skip_kw('include')
+        const location = tokens.save()
+        const fd = skip_str()
+        return {
+            type        : 'include',
+            fd          : fd,
+            location    : location
+        }
+    }
+
     const parse_break = () => {
         if(!is_kw('break')) return
         const location = tokens.save()
@@ -433,10 +445,10 @@ module.exports = tokens => {
             const name = skip_var().value
 
             return {
-                type: 'prefix',
-                name: name,
-                op: op,
-                location: location
+                type        : 'prefix',
+                name        : name,
+                op          : op,
+                location    : location
             }
         })
     }
@@ -452,10 +464,10 @@ module.exports = tokens => {
             else if(is_op('--'))    op = skip_op('--')
 
             return {
-                type: 'postfix',
-                name: name,
-                op: op,
-                location: location
+                type        : 'postfix',
+                name        : name,
+                op          : op,
+                location    : location
             }
         })
     }
@@ -467,9 +479,9 @@ module.exports = tokens => {
             const name = skip_var().value
 
             return {
-                type: 'pointer',
-                name: name,
-                location: location
+                type        : 'pointer',
+                name        : name,
+                location    : location
             }
         })
     }
@@ -477,7 +489,12 @@ module.exports = tokens => {
     const parse_cast = () => {
         return parse_handler(reject => {
             const location = tokens.save()
-            if(!is_op('?')) return;   skip_op('?')
+            
+            let immediate = false
+            if(is_op('?')) skip_op('?') 
+            else if(is_op('!')) (immediate = true) && skip_op('!')
+            else return
+
             if(!is_type())  return;   
             const type = skip_type()
 
@@ -490,10 +507,11 @@ module.exports = tokens => {
                 parse_pointer()
 
             return {
-                type: 'cast',
-                value: value,
-                cast_type: type,
-                location: location
+                type        : 'cast',
+                value       : value,
+                cast_type   : type,
+                location    : location,
+                immediate   : immediate
             }
         })
     }
@@ -517,6 +535,7 @@ module.exports = tokens => {
     const parse_any = () => {
         try {
             return (
+                parse_include() ||
                 parse_break() ||
                 parse_continue() ||
                 parse_if() ||

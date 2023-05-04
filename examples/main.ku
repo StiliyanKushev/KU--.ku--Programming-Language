@@ -1,0 +1,6 @@
+include "../libstd/std.ku"
+@outln "Hello World"
+@outln @chr2str 'A'
+@outln @bol2str @strcmp "He", "He"
+@outln @num2str @str2num "-123"
+@exit 123
