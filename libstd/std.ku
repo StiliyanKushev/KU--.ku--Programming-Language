@@ -43,12 +43,24 @@ bol2str:/str bl bol {
     ret "false"
 }
 
+
+#    stdio functions     #
+# -----------------------#
+
+out:/bol output str {
+    @syscall 4, 1, (+output), (@strlen output), 0, 0, 0
+}
+
+outln:/bol output str {
+    @out output + "\n"
+}
+
 str2num:/num text str {
     :textlen/num = @strlen text
     :result/num
     :si/num = 0
     :neg/bol
-    
+
     if (?chr (+@strcut text, 1)) == '-' {
         si = 1
         neg = true
@@ -56,7 +68,7 @@ str2num:/num text str {
     else if (?chr (+@strcut text, 1)) == '+' {
         si = 1
     }
-    
+
     for :i/num = si, i < textlen, i++ {
         :ascii_num/num = !num ?chr (+@strcut (?str (+text) + i), 1)
         ascii_num = ascii_num - 48
@@ -71,21 +83,10 @@ str2num:/num text str {
     }
 
     if neg {
-        result = result * -1
+        result = result * (-1)
     }
 
     ret result
-}
-
-#    stdio functions     #
-# -----------------------#
-
-out:/bol output str {
-    @syscall 4, 1, (+output), (@strlen output), 0, 0, 0
-}
-
-outln:/bol output str {
-    @out output + "\n"
 }
 
 #    syscall functions     #

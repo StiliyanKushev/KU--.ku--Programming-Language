@@ -14,14 +14,15 @@ module.exports = tokens => {
     // token validating functions
     const is_bool_expr = expr => expr.type == 'bol' || (expr.type == 'binary' && is_bool_op(expr.operator))
     const is_bool_op   = op => ' && || == > < <= >= != '.indexOf(' ' + op + ' ') >= 0 
-    const is_val       = cc => ' num str var chr '.indexOf(' ' + cc.type + ' ') >= 0
+    const is_val       = cc => ' num str var chr dec '.indexOf(' ' + cc.type + ' ') >= 0
     const is_var       = () => { let tok = tokens.peek(); return tok && tok.type == 'var' }
     const is_str       = () => { let tok = tokens.peek(); return tok && tok.type == 'str' }
+    const is_dec       = () => { let tok = tokens.peek(); return tok && tok.type == 'dec' }
     const is_num       = () => { let tok = tokens.peek(); return tok && tok.type == 'num' }
     const is_punc      = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) }
     const is_kw        = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) }
     const is_op        = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) }
-    const is_type      = () => is_kw('num') || is_kw('str') || is_kw('bol') || is_kw('chr')
+    const is_type      = () => is_kw('num') || is_kw('str') || is_kw('bol') || is_kw('chr') || is_kw('dec')
 
     // token skipping functions
     const skip_var    = () => is_var() ? tokens.next() : tokens.croak('Expecting variable name:')

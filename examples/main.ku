@@ -1,6 +1,19 @@
 include "../libstd/std.ku"
-@outln "Hello World"
-@outln @chr2str 'A'
-@outln @bol2str @strcmp "He", "He"
-@outln @num2str @str2num "-123"
-@exit 123
+
+if 0.1 - 1.0 == (-0.9) {
+    @outln "ASD"
+}
+
+if 1.0 + 0.0001 == 1.0001 {
+    @outln "YES"
+}
+
+if (1.51 % 0.5) == 0.01 {
+    @outln "YES"
+}
+
+# @outln "Hello World"
+# @outln @chr2str 'A'
+# @outln @bol2str @strcmp "He", "He"
+# @outln @num2str @str2num "-123"
+# @exit 123

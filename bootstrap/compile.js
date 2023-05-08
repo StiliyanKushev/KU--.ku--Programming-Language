@@ -84,9 +84,10 @@ let write_in_function = text => {
 // note: make sure to watch out for order of push/mov?
 const types_offsets = {
     'num': 4,
-    'bol': 4,
+    'bol': 1,
     'str': 4, // hold address of string
     'chr': 1,
+    'dec': 4,
 }
 
 // unique global counters used as id's
@@ -230,6 +231,46 @@ module.exports.generate_asm = (ast, options) => {
         return arr
     }
 
+    const util_decimal_to_hex = (decimal) => {
+        const buffer = new ArrayBuffer(4)
+        const view = new DataView(buffer)
+        view.setFloat32(0, decimal, false) 
+        const uint32_value = view.getUint32(0, false) 
+        const hex_value = uint32_value.toString(16).padStart(8, '0').toUpperCase()
+        return '0x' + hex_value
+    }
+
+    const util_round_decimal_binary = () => {
+        // round float 1 at eax
+        write_code(`push eax`)
+        write_code(`fld dword [esp]`)
+        write_code(`mov eax, 0x4B189680`)
+        write_code(`push eax`)
+        write_code(`fld dword [esp]`)
+        write_code(`fmulp st1, st0`)
+        write_code(`frndint`)
+        write_code(`mov eax, 0x4B189680`)
+        write_code(`push eax`)
+        write_code(`fdiv dword [esp]`)
+        write_code(`fstp dword [esp]`)
+        write_code(`pop eax`)
+        write_code(`add esp, 8`)
+        // round float 2 at ebx
+        write_code(`push ebx`)
+        write_code(`fld dword [esp]`)
+        write_code(`mov ebx, 0x4B189680`)
+        write_code(`push ebx`)
+        write_code(`fld dword [esp]`)
+        write_code(`fmulp st1, st0`)
+        write_code(`frndint`)
+        write_code(`mov ebx, 0x4B189680`)
+        write_code(`push ebx`)
+        write_code(`fdiv dword [esp]`)
+        write_code(`fstp dword [esp]`)
+        write_code(`pop ebx`)
+        write_code(`add esp, 8`)
+    }
+
     const throw_fatal_error = (error, node, parent) => {
         exit_error('\n'
         + `error: ${error}\n`
@@ -332,6 +373,10 @@ module.exports.generate_asm = (ast, options) => {
     const type_default_value = (parent, value_type) => {
         if(value_type == 'num') return read_value({
             type: 'num',
+            value: 0
+        }, parent, value_type)
+        if(value_type == 'dec') return read_value({
+            type: 'dec',
             value: 0
         }, parent, value_type)
         if(value_type == 'chr') return read_value({
@@ -483,6 +528,17 @@ module.exports.generate_asm = (ast, options) => {
                 write_all: () => {
                     write_code(`;; num`)
                     write_code(`mov eax, ${node.value}`)
+                }
+            }
+        } else if(node.type == 'dec') {
+            check_value_type(node.type)
+            let dec_hex = util_decimal_to_hex(node.value)
+            return {
+                immediate: true,
+                type: node.type,
+                write_all: () => {
+                    write_code(`;; dec`)
+                    write_code(`mov eax, ${dec_hex}`)
                 }
             }
         } else if(node.type == 'chr') {
@@ -823,21 +879,38 @@ module.exports.generate_asm = (ast, options) => {
     }
 
     const read_signed = (node, parent) => {
-        // todo: support signed decimals
+        const com_value = read_value(node.value, parent, ['num', 'str', 'dec'])
+        let ret_type = com_value.type == 'dec' ? 'dec' : 'num'
+
         return {
-            type: 'num',
+            type: ret_type,
             write_all: () => {
-                const com_value = read_value(node.value, parent, ['num', 'str'])
                 com_value.write_all()
 
-                // because in this language the type "str" is just a ptr
-                // we can have a hack that converts the pointer to the string
-                // to a number by making it singed.
                 if(com_value.type == 'str' && node.op.value == '+') {
+                    // because in this language the type "str" is just a ptr
+                    // we can have a hack that converts the pointer to the string
+                    // to a number by making it singed.
                     write_code(`;; signed string to number`)
-                    write_code(`mov eax, eax`)
-                }
-                else {
+                } else if(ret_type == 'dec' && node.op.value == '-') {
+                    // if we want a negatively signed decimal
+                    // we have to use the FPU to multiply by -1
+                    write_code(`;; signed negative decimal`)
+                    read_binary({
+                        left: {
+                            type: 'override',
+                            override: {
+                                type: 'dec',
+                                write_all: () => {}
+                            }
+                        },
+                        right: {
+                            type: 'dec',
+                            value: -1
+                        },
+                        operator: '*',
+                    }, parent).write_all()
+                } else {
                     write_code(`;; signed num`)
                     if(node.op.value == '-') {
                         write_code(`neg eax`)
@@ -890,22 +963,45 @@ module.exports.generate_asm = (ast, options) => {
                 // string concatination
                 type = 'str'
                 req_type = ['str']
+            } else if(left.type == 'dec') {
+                type = 'dec'
+                req_type = ['dec']
             } else {
                 type = 'num'
                 req_type = ['num']
             }
         } else if(node.operator == '-') {
-            type = 'num'
-            req_type = ['num']
+            if(left.type == 'dec') {
+                type = 'dec'
+                req_type = ['dec']
+            } else {
+                type = 'num'
+                req_type = ['num']
+            } 
         } else if(node.operator == '*') {
-            type = 'num'
-            req_type = ['num']
+            if(left.type == 'dec') {
+                type = 'dec'
+                req_type = ['dec']
+            } else {
+                type = 'num'
+                req_type = ['num']
+            } 
         } else if(node.operator == '/') {
-            type = 'num'
-            req_type = ['num']
+            if(left.type == 'dec') {
+                type = 'dec'
+                req_type = ['dec']
+            } else {
+                type = 'num'
+                req_type = ['num']
+            } 
         } else if(node.operator == '%') {
-            type = 'num'
-            req_type = ['num']
+            if(left.type == 'dec') {
+                type = 'dec'
+                req_type = ['dec']
+            } else {
+                type = 'num'
+                req_type = ['num']
+            } 
         } else if(node.operator == '||') {
             type = 'bol'
             req_type = ['bol']
@@ -914,22 +1010,22 @@ module.exports.generate_asm = (ast, options) => {
             req_type = ['bol']
         } else if(node.operator == '<') {
             type = 'bol'
-            req_type = ['num', 'chr']
+            req_type = ['num', 'chr', 'dec']
         } else if(node.operator == '>') {
             type = 'bol'
-            req_type = ['num', 'chr']
+            req_type = ['num', 'chr', 'dec']
         } else if(node.operator == '<=') {
             type = 'bol'
             req_type = ['num', 'chr']
         } else if(node.operator == '>=') {
             type = 'bol'
-            req_type = ['num', 'chr']
+            req_type = ['num', 'chr', 'dec']
         } else if(node.operator == '==') {
             type = 'bol'
-            req_type = ['num', 'bol', 'chr']
+            req_type = ['num', 'bol', 'chr', 'dec']
         } else if(node.operator == '!=') {
             type = 'bol'
-            req_type = ['num', 'bol', 'chr']
+            req_type = ['num', 'bol', 'chr', 'dec']
         }
 
         // we may or may not need a predefined
@@ -971,7 +1067,7 @@ module.exports.generate_asm = (ast, options) => {
             if(node.operator == '+') {
                 if(type == 'num') {
                     write_code(`add eax, ebx ;; + `)
-                } else if (type == 'str') {
+                } else if(type == 'str') {
                     write_code(`mov ecx, eax`)
                     read_call_function({
                         name: 'strapnd',
@@ -992,24 +1088,60 @@ module.exports.generate_asm = (ast, options) => {
                         }].reverse(),
                         opt_free_id: opt_free_id
                     }, parent).write_all()
+                } else if(type == 'dec') {
+                    write_code(`push eax`)
+                    write_code(`fld dword [esp]`)
+                    write_code(`push ebx`)
+                    write_code(`fld dword [esp]`)
+                    write_code(`fadd st1`)
+                    write_code(`fstp dword [esp]`)
+                    write_code(`pop eax`)
+                    write_code(`pop ebx`)
                 } else {
                     throw_unsupported_operation(node, parent)
                 }
             } else if(node.operator == '-') {
                 if(type == 'num') {
                     write_code(`sub eax, ebx ;; -`)
+                } else if(type == 'dec') {
+                    write_code(`push eax`)
+                    write_code(`fld dword [esp]`)
+                    write_code(`push ebx`)
+                    write_code(`fld dword [esp]`)
+                    write_code(`fsubp st1`)
+                    write_code(`fstp dword [esp]`)
+                    write_code(`pop eax`)
+                    write_code(`pop ebx`)
                 } else {
                     throw_unsupported_operation(node, parent)
                 }
             } else if(node.operator == '*') {
                 if(type == 'num') {
                     write_code(`mul ebx ;; *`)
+                } else if(type == 'dec') {
+                    write_code(`push eax`)
+                    write_code(`fld dword [esp]`)
+                    write_code(`push ebx`)
+                    write_code(`fld dword [esp]`)
+                    write_code(`fmulp st1`)
+                    write_code(`fstp dword [esp]`)
+                    write_code(`pop eax`)
+                    write_code(`pop ebx`)
                 } else {
                     throw_unsupported_operation(node, parent)
                 }
             } else if(node.operator == '/') {
                 if(type == 'num') {
                     write_code(`div ebx ;; /`)
+                } else if(type == 'dec') {
+                    write_code(`push eax`)
+                    write_code(`fld dword [esp]`)
+                    write_code(`push ebx`)
+                    write_code(`fld dword [esp]`)
+                    write_code(`fdivp st1`)
+                    write_code(`fstp dword [esp]`)
+                    write_code(`pop eax`)
+                    write_code(`pop ebx`)
                 } else {
                     throw_unsupported_operation(node, parent)
                 }
@@ -1018,6 +1150,20 @@ module.exports.generate_asm = (ast, options) => {
                     write_code(`cdq ;; %`)
                     write_code(`idiv ebx`)
                     write_code(`mov eax, edx`)
+                } else if(type == 'dec') {
+                    const reminder_loop = create_label()
+                    write_code(`push ebx`)
+                    write_code(`fld dword [esp]`)
+                    write_code(`push eax`)
+                    write_code(`fld dword [esp]`)
+                    write_code(`${reminder_loop}:`)
+                    write_code(`fprem`)
+                    write_code(`fabs`)
+                    write_code(`fcomi st0, st1`)
+                    write_code(`ja ${reminder_loop}`)
+                    write_code(`fstp dword [esp]`)
+                    write_code(`pop eax`)
+                    write_code(`pop ebx`)
                 } else {
                     throw_unsupported_operation(node, parent)
                 }
@@ -1034,6 +1180,9 @@ module.exports.generate_asm = (ast, options) => {
                     throw_unsupported_operation(node, parent)
                 }
             } else if(node.operator == '<') {
+                if(type == 'bol' && left.type == 'dec') {
+                    util_round_decimal_binary()
+                }
                 if(type == 'bol') {
                     const nl = create_label()
                     const end = create_label()
@@ -1048,6 +1197,9 @@ module.exports.generate_asm = (ast, options) => {
                     throw_unsupported_operation(node, parent)
                 }
             } else if(node.operator == '>') {
+                if(type == 'bol' && left.type == 'dec') {
+                    util_round_decimal_binary()
+                } 
                 if(type == 'bol') {
                     const ng = create_label()
                     const end = create_label()
@@ -1062,6 +1214,9 @@ module.exports.generate_asm = (ast, options) => {
                     throw_unsupported_operation(node, parent)
                 }
             } else if(node.operator == '<=') {
+                if(type == 'bol' && left.type == 'dec') {
+                    util_round_decimal_binary()
+                } 
                 if(type == 'bol') {
                     const nl = create_label()
                     const end = create_label()
@@ -1076,6 +1231,9 @@ module.exports.generate_asm = (ast, options) => {
                     throw_unsupported_operation(node, parent)
                 }
             } else if(node.operator == '>=') {
+                if(type == 'bol' && left.type == 'dec') {
+                    util_round_decimal_binary()
+                } 
                 if(type == 'bol') {
                     const ng = create_label()
                     const end = create_label()
@@ -1090,6 +1248,9 @@ module.exports.generate_asm = (ast, options) => {
                     throw_unsupported_operation(node, parent)
                 }
             } else if(node.operator == '==') {
+                if(type == 'bol' && left.type == 'dec') {
+                    util_round_decimal_binary()
+                } 
                 if(type == 'bol') {
                     const eq = create_label()
                     const end = create_label()
@@ -1104,6 +1265,9 @@ module.exports.generate_asm = (ast, options) => {
                     throw_unsupported_operation(node, parent)
                 }
             } else if(node.operator == '!=') {
+                if(type == 'bol' && left.type == 'dec') {
+                    util_round_decimal_binary()
+                } 
                 if(type == 'bol') {
                     const eq = create_label()
                     const end = create_label()
@@ -1150,10 +1314,39 @@ module.exports.generate_asm = (ast, options) => {
             type: node.cast_type.value,
             write_all: () => {
                 write_code(`;; cast var ${node.cast_type.value}`)
-                const value = read_value(node.value, parent, ['num', 'chr', 'str', 'bol'])
+                const value = read_value(
+                    node.value, 
+                    parent, 
+                    ['num', 'chr', 'str', 'bol', 'dec'])
                 value.write_all()
 
+                // takes value from eax as number
+                // and stores bitwise representation
+                // of that number back to eax
+                const cast_to_dec = () => {
+                    write_code(`push eax`)
+                    write_code(`fild dword [esp]`)
+                    write_code(`fstp dword [esp]`)
+                    write_code(`pop eax`)
+                }
+
+                // takes bitwise representation of
+                // a decimal from eax, and stores
+                // the whole number to eax as integer
+                const cast_dec_to_num = () => {
+                    write_code(`push eax`)
+                    write_code(`fld dword [esp]`)
+                    write_code(`fisttp dword [esp]`)
+                    write_code(`pop eax`)
+                }
+
                 if(node.immediate) {
+                    if(node.cast_type.value == 'dec') {
+                        return cast_to_dec()
+                    }
+                    if(value.type == 'dec') {
+                        return cast_dec_to_num()
+                    }
                     // if the value is immediate (hardcoded)
                     // we don't treat it as an address, but rather 
                     // as the value at the supposed address itself.
@@ -1186,6 +1379,16 @@ module.exports.generate_asm = (ast, options) => {
                     // todo: for some reason I have a type of size 3 bytes
                 } else if(type_size == 4) {
                     write_code(`mov eax, [eax]`)
+                }
+
+                // after we read the value to eax
+                // optionally cast special types here
+
+                if(node.cast_type.value == 'dec') {
+                    return cast_to_dec()
+                }
+                if(value.type == 'dec') {
+                    return cast_dec_to_num()
                 }
             }
         }
@@ -1328,36 +1531,40 @@ module.exports.generate_asm = (ast, options) => {
     }
 
     const read_if = (node, parent) => {
-        const expr = read_value(node.statement, parent)
-        if(expr.type != 'bol') {
-            throw_statement_not_boolean(node, parent)
-        }
-
         return {
             write_all: () => {
-                // load the value to eax
-                expr.write_all()
-
+                
                 const else_label = create_label()
                 const exit_label = create_label()
-
-                write_code(`cmp eax, 1`)
-                write_code(`jne ${else_label}`)
+                
+                write_code(`push ebp`)
+                write_code(`mov ebp, esp`)
                 
                 const world_if = {
                     parent: parent,
                     context: create_context(),
                 }
 
-                write_code(`push ebp`)
-                write_code(`mov ebp, esp`)
+                const expr = read_value(node.statement, world_if)
+                if(expr.type != 'bol') {
+                    throw_statement_not_boolean(node, parent)
+                }
+
+                // load the value to eax
+                expr.write_all()
+
+                write_code(`cmp eax, 1`)
+                write_code(`jne ${else_label}`)
+                
                 read_scope(node.body.prog, world_if.parent, world_if.context)
                 free_set_context(world_if)
                 write_code(`mov esp, ebp`)
                 write_code(`pop ebp`)
-
                 write_code(`jmp ${exit_label}`)
+
                 write_code(`${else_label}:`)
+                write_code(`mov esp, ebp`)
+                write_code(`pop ebp`)
                 
                 const world_else = {
                     parent: parent,
@@ -2326,8 +2533,19 @@ module.exports.generate_asm = (ast, options) => {
                 args: [ this.make_arg('data', 'num') ],
                 write_internal: (world, data) => {
                     const count_digits_label = create_label()
+                    const non_negative = create_label()
+                    const not_negative = create_label()
+                    write_code(`xor eax, eax`)
+                    write_code(`push eax`)
                     write_code(`mov eax, [ebp - 4]`)
                     write_code(`xor ecx, ecx`)
+                    write_code(`cmp eax, 0`)
+                    write_code(`jnl ${non_negative}`)
+                    write_code(`neg eax`)
+                    write_code(`mov [ebp - 4], eax`)
+                    write_code(`mov ecx, 1`)
+                    write_code(`mov dword [esp], 1`)
+                    write_code(`${non_negative}:`)
                     write_code(`mov ebx, 10`)
                     write_code(`${count_digits_label}:`)
                     write_code(`xor edx, edx`)
@@ -2367,6 +2585,15 @@ module.exports.generate_asm = (ast, options) => {
                     // store address
                     write_code(`sub esp, 4`)
                     write_code(`mov [ebp - 12], eax`)
+
+                    // conditionally store minus sign
+                    write_code(`mov ebx, eax`)
+                    write_code(`pop eax`)
+                    write_code(`cmp eax, 1`)
+                    write_code(`jne ${not_negative}`)
+                    write_code(`mov byte [ebx], 0x2d`)
+                    write_code(`${not_negative}:`)
+                    write_code(`mov eax, ebx`)
 
                     // fill the mapped space with the ascii of each digit
                     const fill_loop = create_label()

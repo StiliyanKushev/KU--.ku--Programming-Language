@@ -1,5 +1,5 @@
 module.exports = reader => {
-    var keywords = ' if else for while true false ret break continue num str bol chr include '
+    var keywords = ' if else for while true false ret break continue num str bol chr dec include '
 
     // navigation functions
     const next = () => read_next()
@@ -43,6 +43,8 @@ module.exports = reader => {
     const read_number = () => {
         let has_dot = false
         let number = read_while(ch => ch == '.' ? has_dot ? false : (has_dot = true) : is_digit(ch))
+        if(has_dot)
+        return { type: 'dec', value: parseFloat(number) }
         return { type: 'num', value: parseFloat(number) }
     }
 

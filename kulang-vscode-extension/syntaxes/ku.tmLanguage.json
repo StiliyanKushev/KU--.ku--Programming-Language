@@ -34,13 +34,13 @@
 		"keywords": {
 			"patterns": [{
 				"name": "keyword.control.ku",
-				"match": "(\\bif|\\belse|\\bwhile|\\bfor|\\bret|\\bbreak|\\bcontinue|\\bnum|\\bstr|\\bchr|\\bbol|\\binclude|\/num|\/str|\/bol|\/chr)\\b"
+				"match": "(\\bif|\\belse|\\bwhile|\\bfor|\\bret|\\bbreak|\\bcontinue|\\bnum|\\bstr|\\bchr|\\bdec|\\bbol|\\binclude|\/num|\/str|\/bol|\/chr|\/dec|\\!num|\\!str|\\!bol|\\!chr|\\!dec|\\?num|\\?str|\\?bol|\\?chr|\\?dec)\\b"
 			}]
 		},
         "numbers": {
 			"patterns": [{
 				"name": "constant.numeric.ku",
-				"match": "\\b(\\d+)\\b"
+				"match": "\\b(\\d\\.?)(\\d?)+\\b"
 			}]
 		},
         "boolean": {
