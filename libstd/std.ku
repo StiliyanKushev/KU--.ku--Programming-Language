@@ -27,22 +27,29 @@ strcmp:/bol lstr str, rstr str {
     ret true
 }
 
-#    parser functions    #
-# -----------------------#
+lcase:/str text str {
+    for :i/num = 0, i < (@strlen text), i++ {
+        :char/chr = ?chr ((!num text) + i)
 
-chr2str:/str ch chr {
-    :to_str/str = ""
-    ::(+to_str)/chr = ch
-    ret to_str
-}
-
-bol2str:/str bl bol {
-    if bl {
-        ret "true"
+        # between A to Z
+        if ((!num char) >= 65) && ((!num char) <= 90) {
+            ::(!num text) + i /chr = !chr ((!num char) + 32)
+        }
     }
-    ret "false"
+    ret text
 }
 
+ucase:/str text str {
+    for :i/num = 0, i < (@strlen text), i++ {
+        :char/chr = ?chr ((!num text) + i)
+
+        # between a to z
+        if ((!num char) >= 97) && ((!num char) <= 122) {
+            ::(!num text) + i /chr = !chr ((!num char) - 32)
+        }
+    }
+    ret text
+}
 
 #    stdio functions     #
 # -----------------------#
@@ -55,17 +62,78 @@ outln:/bol output str {
     @out output + "\n"
 }
 
+#    parser functions    #
+# -----------------------#
+
+chr2str:/str char chr {
+    :to_str/str = ""
+    ::(+to_str)/chr = char
+    ret to_str
+}
+
+bol2str:/str boolean bol {
+    if boolean {
+        ret "true"
+    }
+    ret "false"
+}
+
+num2str:/str number num {
+    if number == 0 {
+        ret "0"
+    }
+
+    :nstr/str
+    :neg/bol = number < 0
+
+    if neg {
+        number = number * (-1)
+    }
+
+    :curr/num = number                         
+
+    while curr > 0 {
+        :tdec/dec = !dec curr                  
+        :tres/dec = tdec / 10.0                
+        :tnum/num = !num tres                  
+        :trem/dec = (tres - !dec tnum) * 10.0  
+        :digt/num = !num trem                  
+        nstr = " " + nstr
+        ::!num nstr /chr = !chr (digt + !num '0')
+        curr = tnum
+    }
+
+    if neg {
+        nstr = "-" + nstr
+    }
+
+    ret nstr
+}
+
+dec2str:/str decimal dec {
+    :int/num = !num decimal      
+    :rem/dec = decimal - !dec int
+    while true {
+        rem = (rem * 10.0)
+        if (rem % 1.0) == 0.0 {
+            break
+        }
+    }
+    :remint/num = !num rem
+    ret (@num2str int) + "." + @num2str remint
+}
+
 str2num:/num text str {
     :textlen/num = @strlen text
     :result/num
     :si/num = 0
     :neg/bol
 
-    if (?chr (+@strcut text, 1)) == '-' {
+    if (?chr (+text)) == '-' {
         si = 1
         neg = true
     }
-    else if (?chr (+@strcut text, 1)) == '+' {
+    else if (?chr (+text)) == '+' {
         si = 1
     }
 
@@ -87,6 +155,62 @@ str2num:/num text str {
     }
 
     ret result
+}
+
+str2dec:/dec text str {
+    :textlen/num = @strlen text
+    :int/num
+    :frac/num
+    :dot_idx/num = textlen
+    :left_str/str
+    :right_str/str
+    for :i/num = 0, i < textlen, i++ {
+        :char/chr = ?chr ((!num text) + i)
+        if char == '.' {
+            dot_idx = i
+            break
+        }
+        if ((!num char) < 48) || ((!num char) > 57) {
+            # todo: error handling
+        }
+        left_str = left_str + @chr2str char
+    }
+    for :i/num = dot_idx + 1, i < textlen, i++ {
+        :char/chr = ?chr ((!num text) + i)
+        if ((!num char) < 48) || ((!num char) > 57) {
+            # todo: error handling
+        }
+        right_str = right_str + @chr2str char
+    }
+
+    int = @str2num left_str
+    frac = @str2num right_str
+
+    :intdec/dec = !dec int
+    :fracdec/dec = !dec frac
+    for :i/num = 0, i < textlen - dot_idx - 1, i++ {
+        fracdec = fracdec / 10.0
+    }
+
+    ret intdec + fracdec
+}
+
+str2bol:/bol text str {
+    text = @lcase text
+
+    if @strcmp text, "false" {
+        ret false
+    } 
+    else if @strcmp text, "true" {
+        ret true
+    }
+    else {
+        # todo error handling
+    }
+}
+
+str2chr:/chr text str {
+    ret ?chr !num text
 }
 
 #    syscall functions     #

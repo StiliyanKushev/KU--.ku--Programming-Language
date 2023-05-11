@@ -1,23 +1,12 @@
-# index
-# ---------------------------------------------
-# 0, 1, 2, 3, 4, 5, 6,  7,  8,  9,  10, 11
-# ---------------------------------------------
-# value
-# ---------------------------------------------
-# 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144 ...
-# ---------------------------------------------
+include "../libstd/std.ku"
 
-fib:/num max_index num {
-    :left/num = 1
-    :right/num = 1
+# :test/str = "Hello World!"
+# @outln @lcase test
+# @outln @ucase test
+# @outln @bol2str @str2bol "truE"
 
-    for :i/num = 0, i < max_index - 1, i++ {
-        :temp/num = right
-        right = right + left
-        left = temp
-    }
+# if (@str2dec "1.23") == 1.23 {
+#     @outln "HERE"
+# }
 
-    ret right
-}
-
-@outln @num2str @fib 5 # prints 8 correctly!
+@outln @dec2str 1.23

@@ -80,8 +80,6 @@ let write_in_function = text => {
 }
 
 // offsets on the stack in bytes
-// note: if a type size is more than 4
-// note: make sure to watch out for order of push/mov?
 const types_offsets = {
     'num': 4,
     'bol': 1,
@@ -582,15 +580,28 @@ module.exports.generate_asm = (ast, options) => {
         } else if(node.type == 'var') {
             const found_var     = lookup_variable(node, parent, node.value)
             const var_name      = found_var.value.name
-            check_value_type(found_var.value.type)
+            const var_type      = found_var.value.type
+            check_value_type(var_type)
             return {
-                type: found_var.value.type,
+                type: var_type,
                 name: var_name,
                 free_id: found_var.value.free_id, // can be undefined
                 write_all: () => {
                     write_code(`;; var val ${var_name}`)
                     execute_in_above_scope(() => {
-                        write_code(`mov eax, [ebp - ${found_var.ebp_offset}]`)
+                        const type_size = types_offsets[var_type]
+                        if(type_size == 1) {
+                            write_code(`xor eax, eax`)
+                            write_code(`mov byte al, [ebp - ${found_var.ebp_offset}]`)
+                        } else if(type_size == 2) {
+                            write_code(`xor eax, eax`)
+                            write_code(`mov word ax, [ebp - ${found_var.ebp_offset}]`)
+                        } else if(type_size == 3) {
+                            // todo: probably not important unless
+                            // todo: for some reason I have a type of size 3 bytes
+                        } else if(type_size == 4) {
+                            write_code(`mov eax, [ebp - ${found_var.ebp_offset}]`)
+                        }
                     }, found_var.lookup_index)
                 }
             }
@@ -1089,6 +1100,7 @@ module.exports.generate_asm = (ast, options) => {
                         opt_free_id: opt_free_id
                     }, parent).write_all()
                 } else if(type == 'dec') {
+                    util_round_decimal_binary()
                     write_code(`push eax`)
                     write_code(`fld dword [esp]`)
                     write_code(`push ebx`)
@@ -1104,6 +1116,7 @@ module.exports.generate_asm = (ast, options) => {
                 if(type == 'num') {
                     write_code(`sub eax, ebx ;; -`)
                 } else if(type == 'dec') {
+                    util_round_decimal_binary()
                     write_code(`push eax`)
                     write_code(`fld dword [esp]`)
                     write_code(`push ebx`)
@@ -1119,6 +1132,7 @@ module.exports.generate_asm = (ast, options) => {
                 if(type == 'num') {
                     write_code(`mul ebx ;; *`)
                 } else if(type == 'dec') {
+                    util_round_decimal_binary()
                     write_code(`push eax`)
                     write_code(`fld dword [esp]`)
                     write_code(`push ebx`)
@@ -1134,6 +1148,7 @@ module.exports.generate_asm = (ast, options) => {
                 if(type == 'num') {
                     write_code(`div ebx ;; /`)
                 } else if(type == 'dec') {
+                    util_round_decimal_binary()
                     write_code(`push eax`)
                     write_code(`fld dword [esp]`)
                     write_code(`push ebx`)
@@ -1151,6 +1166,7 @@ module.exports.generate_asm = (ast, options) => {
                     write_code(`idiv ebx`)
                     write_code(`mov eax, edx`)
                 } else if(type == 'dec') {
+                    util_round_decimal_binary()
                     const reminder_loop = create_label()
                     write_code(`push ebx`)
                     write_code(`fld dword [esp]`)
@@ -1885,12 +1901,6 @@ module.exports.generate_asm = (ast, options) => {
             this.context.functions.set("strapnd", this.strapnd)
             this.context.functions.set("strcut", this.strcut)
     
-            // cast 
-            this.context.functions.set("bol2str", this.bol2str)
-            this.context.functions.set("num2str", this.num2str)
-            this.context.functions.set("str2num", this.str2num)
-            this.context.functions.set("str2bol", this.str2bol)
-
             // input
             this.context.functions.set("rkey", this.rkey)
             this.context.functions.set("rline", this.rline)
@@ -2479,149 +2489,6 @@ module.exports.generate_asm = (ast, options) => {
                     }, world).write_all()
                     write_code(`mov ebx, eax`)
                     write_code(`mov eax, ecx`)
-                    write_code(`jmp ${data.label_ret_func}`)
-                }
-            })
-        }
-        
-        get str2num() {
-            return this.make_func({
-                name: 'str2num',
-                ret_type: 'num',
-                args: [ this.make_arg('data', 'str') ],
-                write_internal: () => {
-                    // todo:
-                    write_code('xor eax, eax')
-                    write_code('xor eax, eax')
-                    write_code('xor eax, eax')
-                }
-            })
-        }
-
-        get str2bol() {
-            return this.make_func({
-                name: 'str2bol',
-                ret_type: 'bol',
-                args: [ this.make_arg('data', 'str') ],
-                write_internal: () => {
-                    // todo:
-                    write_code('xor eax, eax')
-                    write_code('xor eax, eax')
-                    write_code('xor eax, eax')
-                }
-            })
-        }
-
-        get bol2str() {
-            return this.make_func({
-                name: 'bol2str',
-                ret_type: 'str',
-                args: [ this.make_arg('data', 'bol') ],
-                write_internal: () => {
-                    // todo:
-                    write_code('xor eax, eax')
-                    write_code('xor eax, eax')
-                    write_code('xor eax, eax')
-                }
-            })
-        }
-
-        get num2str() {
-            return this.make_func({
-                name: 'num2str',
-                ret_type: 'str',
-                args: [ this.make_arg('data', 'num') ],
-                write_internal: (world, data) => {
-                    const count_digits_label = create_label()
-                    const non_negative = create_label()
-                    const not_negative = create_label()
-                    write_code(`xor eax, eax`)
-                    write_code(`push eax`)
-                    write_code(`mov eax, [ebp - 4]`)
-                    write_code(`xor ecx, ecx`)
-                    write_code(`cmp eax, 0`)
-                    write_code(`jnl ${non_negative}`)
-                    write_code(`neg eax`)
-                    write_code(`mov [ebp - 4], eax`)
-                    write_code(`mov ecx, 1`)
-                    write_code(`mov dword [esp], 1`)
-                    write_code(`${non_negative}:`)
-                    write_code(`mov ebx, 10`)
-                    write_code(`${count_digits_label}:`)
-                    write_code(`xor edx, edx`)
-                    write_code(`div ebx`)
-                    write_code(`inc ecx`)
-                    write_code(`cmp eax, 0`)
-                    write_code(`jne ${count_digits_label}`)
-                    // number of digits in eax
-                    write_code(`mov eax, ecx`)
-
-                    // store length to local var
-                    write_code(`sub esp, 4`)
-                    write_code(`mov [ebp - 8], ecx`)
-                    
-                    // allocate a char per digit + null terminator
-                    write_code(`push ebp`)
-                    write_code(`mov ebx, 4`)
-                    write_code(`mul ebx`)
-                    write_code(`add eax, 4`)
-                    write_code(`xor ebx, ebx`)
-                    write_code(`mov ecx, eax`)
-                    write_code(`mov edx, 0x3`)
-                    write_code(`mov esi, 0x22`)
-                    write_code(`mov edi, -1`)
-                    write_code(`xor ebp, ebp`)
-                    write_code(`mov eax, 192`)
-                    // pointer to address space is now in eax
-                    write_code(`int 0x80`)
-                    write_code(`pop ebp`)
-
-                    // add null terminator at the end
-                    write_code(`push ebx`)
-                    write_code(`mov ebx, [ebp - 8]`)
-                    write_code(`mov [eax + ebx], byte 0x1`)
-                    write_code(`pop ebx`)
-
-                    // store address
-                    write_code(`sub esp, 4`)
-                    write_code(`mov [ebp - 12], eax`)
-
-                    // conditionally store minus sign
-                    write_code(`mov ebx, eax`)
-                    write_code(`pop eax`)
-                    write_code(`cmp eax, 1`)
-                    write_code(`jne ${not_negative}`)
-                    write_code(`mov byte [ebx], 0x2d`)
-                    write_code(`${not_negative}:`)
-                    write_code(`mov eax, ebx`)
-
-                    // fill the mapped space with the ascii of each digit
-                    const fill_loop = create_label()
-                    write_code(`mov eax, [ebp - 4]`)
-                    write_code(`xor ecx, ecx`)
-                    write_code(`mov ebx, 10`)
-                    write_code(`${fill_loop}:`)
-                    write_code(`xor edx, edx`)
-                    write_code(`div ebx`)
-                    write_code(`push eax`)
-                    write_code(`push ebx`)
-                    write_code(`mov eax, [ebp - 12]`)
-                    write_code(`mov ebx, [ebp - 8]`)
-                    write_code(`add eax, ebx`)
-                    write_code(`sub eax, 1`)
-                    write_code(`sub eax, ecx`)
-                    write_code(`mov ebx, eax`)
-                    write_code(`mov eax, edx`)
-                    write_code(`add eax, byte '0'`)
-                    write_code(`mov byte [ebx], al`)
-                    write_code(`pop ebx`)
-                    write_code(`pop eax`)
-                    write_code(`inc ecx`)
-                    write_code(`cmp eax, 0`)
-                    write_code(`jne ${fill_loop}`)
-
-                    // returns the pointer to the string in eax
-                    write_code(`mov eax, [ebp - 12]`)
                     write_code(`jmp ${data.label_ret_func}`)
                 }
             })
