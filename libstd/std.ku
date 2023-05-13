@@ -62,6 +62,10 @@ outln:/bol output str {
     @out output + "\n"
 }
 
+clear:/bol {
+    @out "\x1bc"
+}
+
 #    parser functions    #
 # -----------------------#
 

@@ -1,12 +1,24 @@
 include "../libstd/std.ku"
 
-# :test/str = "Hello World!"
-# @outln @lcase test
-# @outln @ucase test
-# @outln @bol2str @str2bol "truE"
+for :i/num = 0, i < 1000000, i++ {
+    @outln @num2str i   
+}
 
-# if (@str2dec "1.23") == 1.23 {
-#     @outln "HERE"
+# struct Human {
+#     :age/num
+#     :first_name/str
+#     :last_name/str
+#     say_hello:/bol
 # }
 
-@outln @dec2str 1.23
+# :my_person/Human = {
+#     :age/num = 13
+#     :first_name/str = "Peter"
+#     :last_name/str = "Jones"
+#     say_hello:/bol {
+#         @outln "Hello, I am: " + first_name + " " + last_name
+#         @outln "I am " + @num2str age + " years old."
+#     }
+# }
+
+# my_person.@say_hello

@@ -33,8 +33,6 @@ module.exports.compile_asm = ([asm, options]) => {
     fs.rmSync(working_dir, { recursive: true, force: true })
 
     console.log('-'.repeat(process.stdout.columns))
-    try {cp.execFileSync(exe_path)} 
-    catch (err) {console.log(err.stderr.toString())}
 }
 
 // ------------------------------------------------------------------------ //
