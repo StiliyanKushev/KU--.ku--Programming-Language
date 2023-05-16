@@ -1,8 +1,18 @@
 include "../libstd/std.ku"
 
-for :i/num = 0, i < 1000000, i++ {
-    @outln @num2str i   
+:text/str
+
+func:/bol count num {
+    text = text + "."
+    if count == 4000 {
+        @outln text
+        ret
+    }
+
+    @func count + 1
 }
+
+@func 0
 
 # struct Human {
 #     :age/num

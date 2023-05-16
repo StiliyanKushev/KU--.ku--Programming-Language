@@ -2,12 +2,6 @@ KU (.ku) Programming Language
 
 ## Todo List
 
--- string --
-------------
-
-@strcmp - takes two strings and compares them. returns true or false.
-"str" == "str" - binary shorthand
-
 -- inputs --
 ------------
 @rkey - reads key from stdin, returns string
@@ -35,41 +29,3 @@ struct person {
     last_name = "Kushev"
     programmer = true
 }
-
--- casting --
--------------
-
-?num addr
-?str addr
-?bol addr
-?custom_struct addr
-
--- parsing --
--------------
-
-@num2str 
-@str2num
-...
-
--- decimals --
---------------
-
-:my_var/dec = 1.1
-
--- pointers --
---------------
-
-&my_str
-&my_bol
-&my_strcut
-&my_number
-
--- syscalls --
---------------
-@syscall - takes pointer to array filled with pointers for each argument.
-
--- memory edits --
-------------------
-
-::&lang = 123
-::486018451 = 123
