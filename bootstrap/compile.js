@@ -44,9 +44,6 @@ let asm_func = '\n'
 const asm_final = () => `
 \tsection .data
 ${asm_data}
-\t;; --- function defines :begin: --- ;;
-${asm_func}
-\t;; --- function defines :end: --- ;;\n
 \tsection .text
 \tglobal _start
 \t_start:
@@ -60,6 +57,9 @@ ${asm_text}
 \tmov eax, 1
 \tmov ebx, 0
 \tint 0x80
+\t;; --- function defines :begin: --- ;;
+${asm_func}
+\t;; --- function defines :end: --- ;;\n
 `
 
 // append text to the .text section
@@ -409,14 +409,20 @@ module.exports.generate_asm = (ast, options) => {
     }
 
     const lookup_function = (node, parent, name, lookup_index = 0) => {
-        if(!parent) throw_function_not_exist(node, parent)
+        if(!parent && !name) {
+            return false
+        }
+        else if (!parent) {
+            throw_function_not_exist(node, parent)
+        }
         if(!name) {
             // we're only looking for the closest scope above
             // that is a function.
             if(parent.context.func_self) {
                 return {
                     parent: parent,
-                    lookup_index: lookup_index
+                    lookup_index: lookup_index,
+                    value: parent.context.func_self
                 }
             }
         }
@@ -639,7 +645,6 @@ module.exports.generate_asm = (ast, options) => {
         let args       = node.vars
 
         const label_start_func  = `__${name}__begin` + create_label()
-        const label_end_func    = `__${name}__skip` + create_label()
         const label_ret_func    = `__${name}__ret` + create_label()
 
         let data = {
@@ -662,7 +667,6 @@ module.exports.generate_asm = (ast, options) => {
             write_all: () => {
                 let old_write_code = write_code
                 write_code = write_in_function
-                write_code(`jmp ${label_end_func}`)
                 write_code(`${label_start_func}:`)
                 write_code(`push ebp`)
                 write_code(`mov ebp, esp`)
@@ -682,8 +686,9 @@ module.exports.generate_asm = (ast, options) => {
                                     // we skip the saved 'ebp'.
                                     // we skip the pushed by 'call' ip.
                                     // we skip each previous argument.
-                                    write_code(`mov eax, [ebp + 8 + ${i * 4}]`)
-                                    // write_code(`mov eax, [ebp + 8 + ${(i * 4) + 4}]`)
+                                    // we skip the temporarily pushed ebp of parent.
+                                    // more info at read_call_function
+                                    write_code(`mov eax, [ebp + 8 + 4 + ${i * 4}]`)
                                 }
                             }
                         },
@@ -707,7 +712,6 @@ module.exports.generate_asm = (ast, options) => {
                 write_code(`mov esp, ebp`)
                 write_code(`pop ebp`)
                 write_code(`ret`)
-                write_code(`${label_end_func}:`)
                 write_code = old_write_code
             }
         }
@@ -785,7 +789,12 @@ module.exports.generate_asm = (ast, options) => {
                     parent.context.var_offset += 4
                 })
 
-                write_code(`call ${_start_func}`)
+                // set ebp to the one in the current function scope.
+                // this could be several scopes above, like if we had
+                // if statements or loops.
+                execute_in_above_scope(() => {
+                    write_code(`call ${_start_func}`)
+                }, found_func.lookup_index)
                 
                 // clear args from local space now
                 parent.context.var_offset -= 4 * func_args.length
@@ -805,6 +814,7 @@ module.exports.generate_asm = (ast, options) => {
 
     const read_ret = (node, parent) => {
         const found_func = lookup_function(node, parent)
+        if(!found_func) throw_function_not_exist(node, parent)
 
         const lookup_index      = found_func.lookup_index
         const label_ret_func    = found_func.parent.context.func_self.label_ret_func
@@ -2100,9 +2110,9 @@ module.exports.generate_asm = (ast, options) => {
                 name: 'inner_strlen',
                 ret_type: 'num',
                 args: [ this.make_arg('data', 'str') ],
-                write_internal: (_, data) => {
+                write_internal: (world, data) => {
                     write_code(`xor ecx, ecx`)
-                    write_code(`mov eax, [ebp + 8]`)
+                    read_value({ type: 'var', value: 'data' }, world).write_all()
                     write_code(`${loop_start}:`)
                     write_code(`cmp byte [eax], 0`)
                     write_code(`je ${loop_end}`)
@@ -2493,7 +2503,7 @@ module.exports.generate_asm = (ast, options) => {
         }
     }
 
-    const program_scope = read_scope(ast.prog, core_com)
+    const program_scope = read_scope(ast.prog, core_com.parent, core_com.context)
     free_set_context(program_scope)
 
     // revert back the cwd to original
