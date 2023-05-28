@@ -1,2 +1,0 @@
-include "../libstd/std.ku"
-@outln "Hello World"

@@ -1,7 +1,7 @@
 module.exports = tokens => {
     // the z-index of operators basically
     const PRECEDENCE = {
-        '=': 1, '||': 2, '&&': 3,
+        '=': 1, '&': 1, '|': 1, '||': 2, '&&': 3,
         '<': 7, '>': 7, '<=': 7, '>=': 7, '==': 7, '!=': 7,
         '+': 10, '-': 10,
         '*': 20, '/': 20, '%': 20,
@@ -31,6 +31,7 @@ module.exports = tokens => {
     const skip_op     = op => is_op(op) ? tokens.next() : tokens.croak('Expecting operator: \'' + op + '\'')
     const skip_type   = () => is_type() ? tokens.next() : tokens.croak('Expecting type name:')
     const skip_str    = () => is_str() ? tokens.next() : tokens.croak('Expecting string:')
+    const skip_num    = () => is_num() ? tokens.next() : tokens.croak('Expecting number:')
 
     // helper functions 
     const unexpected = () => tokens.croak('Unexpected token: ' + JSON.stringify(tokens.peek()))
@@ -119,17 +120,43 @@ module.exports = tokens => {
             if(!is_punc(':'))   return; skip_punc(':')
             const address     = parse_atom()
             if(!is_op('/'))     return; skip_op('/')
-            if(!is_type())      return; const as_type = skip_type()
+            if(!is_type())      return; let as_type = skip_type()
+
+            if(is_punc('[')) {
+                as_type.value += '[]'
+                skip_punc('[')
+                skip_punc(']')
+            }
+
             if(!is_op('='))     return; skip_op('=')
 
             return {
                 type        : 'massign',
                 address     : address,
                 as_type     : as_type,
-                value       : parse_atom(),
+                value       : parse_atom() || 
+                              parse_inline_array(as_type) ||
+                              unexpected(),
                 location    : location
             }
         })
+    }
+
+    function parse_inline_array(value_type) {
+        if(!is_punc('[')) return
+        const location = tokens.save()
+        skip_punc('[')
+        const values = parse_delimited(
+            () => true, 
+            () => ({ location: tokens.save(), value: parse_atom() }), 
+            ',')
+        skip_punc(']')
+        return {
+            type: 'inline_array',
+            values: values,
+            value_type: value_type,
+            location
+        }
     }
 
     const parse_declare = () => {
@@ -137,15 +164,48 @@ module.exports = tokens => {
             if(!is_punc(':'))   return; skip_punc(':')
             if(!is_var())       return; const name = skip_var()
             if(!is_op('/'))     return; skip_op('/')
-            if(!is_type())      return; const value_type = skip_type()
+            if(!is_type())      return; let value_type = skip_type()
+
             const location = tokens.save()
+            let is_array, array_size
+
+            if(is_punc('[')) {
+                is_array = true
+                value_type.value += '[]'
+                skip_punc('[')
+                is_num() && (array_size = skip_num())
+                skip_punc(']')
+            }
+
+            if(is_array && array_size && is_op('=')) {
+                unexpected()
+            }
+
+            if(is_array && !array_size && !is_op('=')) {
+                unexpected()
+            }
+
+            // if an empty array with predefined size is
+            // typed, we'll just mock an inline array (zero'ed out)
+            function mock_inline_array() {
+                if(!is_array || !array_size) {
+                    return
+                }
+                return {
+                    type: 'inline_array',
+                    values: undefined,
+                    array_size: array_size,
+                    value_type: value_type,
+                    location
+                }
+            }
 
             if(!is_op('=')) return {
                 type        : 'var',
                 mode        : 'declare',
                 name        : name.value,
-                value       : undefined,
-                value_type  : value_type
+                value       : mock_inline_array() || undefined,
+                value_type  : value_type,
             }
 
             skip_op('=')
@@ -154,9 +214,11 @@ module.exports = tokens => {
                 type        : 'var',
                 mode        : 'declare',
                 name        : name.value,
-                value       : parse_atom(),
+                value       : parse_atom() || 
+                              parse_inline_array(value_type) ||
+                              unexpected(),
                 value_type  : value_type,
-                location    : location
+                location    : location,
             }
         })
     }
@@ -487,6 +549,47 @@ module.exports = tokens => {
         })
     }
 
+    const parse_indexed = () => {
+        return parse_handler(reject => {
+            const location = tokens.save()
+
+            if(!is_var())       return; const array_name = skip_var()
+            if(!is_punc('['))   return;
+
+            skip_punc('[')
+            const index = parse_atom()
+            skip_punc(']')
+
+            return {
+                type        : 'indexed',
+                location    : location,
+                array_name  : array_name,
+                index       : index,
+            }
+        })
+    }
+
+    const parse_array_assign = () => {
+        return parse_handler(reject => {
+            if(!is_var())       return;     const array_name = skip_var()
+            if(!is_punc('['))   return;     skip_punc('[')
+            const location = tokens.save()
+
+            const index = parse_atom()
+            skip_punc(']')
+            if(!is_op('=')) unexpected();   skip_op('=')
+            const value = parse_atom()
+
+            return {
+                type        : 'array_assign',
+                array_name  : array_name,
+                index       : index,
+                value       : value,
+                location    : location
+            }
+        })
+    }
+
     const parse_cast = () => {
         return parse_handler(reject => {
             const location = tokens.save()
@@ -497,7 +600,13 @@ module.exports = tokens => {
             else return
 
             if(!is_type())  return;   
-            const type = skip_type()
+            let type = skip_type()
+
+            if(is_punc('[')) {
+                skip_punc('[')
+                skip_punc(']')
+                type.value += '[]'
+            }
 
             const value = 
                 parse_binary() || 
@@ -525,6 +634,7 @@ module.exports = tokens => {
                 parse_prefix() ||
                 parse_postfix() ||
                 parse_call() ||
+                parse_indexed() ||
                 parse_datatypes() || 
                 parse_pointer() ||
                 parse_cast() ||
@@ -553,7 +663,8 @@ module.exports = tokens => {
                 parse_declare() ||
                 parse_pointer() ||
                 parse_cast() ||
-                parse_datatypes(null, false) ||  
+                parse_datatypes(null, false) ||
+                parse_array_assign() ||
                 unexpected()
             )
         } catch { return unexpected() }

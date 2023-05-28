@@ -2,17 +2,6 @@ KU (.ku) Programming Language
 
 ## Todo List
 
--- inputs --
-------------
-@rkey - reads key from stdin, returns string
-@rline - reads line from stdin, returns string
-
--- memory management --
------------------------
-
-@mmap - takes size/num, returns address/num on heap
-@munmap - takes address/num and size/num, and free's memory
-
 -- structs --
 -------------
 
@@ -29,3 +18,22 @@ struct person {
     last_name = "Kushev"
     programmer = true
 }
+    
+-- sizeof --
+------------
+
+:temp/num = 123
+@outln @num2str sizeof temp    # prints 4
+@outln @num2str sizeof dec     # prints 4
+
+-- throw error --
+-----------------
+
+# this will also print the line, col, file, etc..
+# and then it will exit with errno 1
+throw "My error goes here"
+
+-- document the syntax --
+-------------------------
+
+# note: this will probably enforce some overall changes.
