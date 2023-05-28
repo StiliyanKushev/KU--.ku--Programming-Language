@@ -8,7 +8,7 @@ module.exports = reader => {
  
     // validation functions
     const is_whitespace = ch => ' \t\n'.indexOf(ch) >= 0
-    const is_punc       = ch => ':,(){}[]@'.indexOf(ch) >= 0
+    const is_punc       = ch => ':,(){}[]@$'.indexOf(ch) >= 0
     const is_op_char    = ch => '+-*/%=&|<>!?'.indexOf(ch) >= 0
     const is_id_start   = ch => /[a-z_A-Z]/i.test(ch)
     const is_digit      = ch => /[0-9]/i.test(ch)

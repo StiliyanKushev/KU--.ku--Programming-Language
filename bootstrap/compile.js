@@ -664,6 +664,10 @@ module.exports.generate_asm = (ast, options) => {
             const com_value = read_indexed(node, parent)
             check_value_type(com_value.type)
             return com_value
+        } else if(node.type == 'sizeof') {
+            const com_value = read_sizeof(node, parent)
+            check_value_type(com_value.type)
+            return com_value
         } else {
             throw_unknown_node_type(node, parent)
         }
@@ -1378,6 +1382,30 @@ module.exports.generate_asm = (ast, options) => {
                 execute_in_above_scope(() => {
                     write_code(`lea eax, [ebp - ${found_var.ebp_offset}]`)
                 }, found_var.lookup_index)
+            }
+        }
+    }
+
+    const read_sizeof = (node, parent) => {
+        // size of type
+        if(node.value.type == 'kw') {
+            return {
+                type: 'num',
+                write_all: () => {
+                    write_code(`;; sizeof type`)
+                    write_code(`mov eax, ${types_offsets[node.value.value]}`)
+                }
+            }
+        }
+        // size of variable's type
+        else {
+            const found_var = read_value(node.value, parent)
+            return {
+                type: 'num',
+                write_all: () => {
+                    write_code(`;; sizeof type`)
+                    write_code(`mov eax, ${types_offsets[found_var.type]}`)
+                }
             }
         }
     }

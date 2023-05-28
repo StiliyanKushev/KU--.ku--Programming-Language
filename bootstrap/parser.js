@@ -248,6 +248,8 @@ module.exports = tokens => {
                         parse_datatypes() ||
                         parse_pointer() ||
                         parse_cast() ||
+                        parse_indexed() ||
+                        parse_sizeof() ||
                         parse_signed()
                 if(!left)       return 
                 if(!is_op())    return
@@ -286,6 +288,8 @@ module.exports = tokens => {
                     parse_datatypes() || 
                     parse_pointer() ||
                     parse_cast() ||
+                    parse_indexed() ||
+                    parse_sizeof() ||
                     parse_signed(), PRECEDENCE[op]),
                 location : location
             }, prev_prec)
@@ -590,6 +594,28 @@ module.exports = tokens => {
         })
     }
 
+    const parse_sizeof = () => {
+        return parse_handler(reject => {
+            const location = tokens.save()
+            if(!is_punc('$')) return; skip_punc('$')
+            if(!is_var() && !is_type()) return;
+            
+            if(is_type()) {
+                return {
+                    type: 'sizeof',
+                    value: skip_type(),
+                    location: location
+                }
+            }
+            
+            return {
+                type: 'sizeof',
+                value: parse_atom(),
+                location: location
+            }
+        })
+    }
+
     const parse_cast = () => {
         return parse_handler(reject => {
             const location = tokens.save()
@@ -638,6 +664,7 @@ module.exports = tokens => {
                 parse_datatypes() || 
                 parse_pointer() ||
                 parse_cast() ||
+                parse_sizeof() ||
                 undefined
             )
         } catch { unexpected() }

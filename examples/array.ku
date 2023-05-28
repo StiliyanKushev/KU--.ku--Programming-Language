@@ -1,16 +1,13 @@
 include "../libstd/std.ku"
 
 # stored on the heap with 4 elements
-:arr1/num[] = !num[] @mmap 4 * 4
+:arr1/num[] = !num[] @mmap $num * 4
 arr1[0] = 123
 @outln @num2str arr1[0]
  
 # stored on the stack with 4 elements
 :arr2/num[] = [ 1, 2, 3, 4, 5 ]
-
 arr2[0] = 88
-
-# todo: sizeof
 
 for :i/num = 0, i < 5, i++ {
     @outln @num2str arr2[i]
