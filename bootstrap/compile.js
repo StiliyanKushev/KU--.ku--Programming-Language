@@ -413,6 +413,19 @@ module.exports.generate_asm = (ast, options) => {
             type: 'str',
             value: ''
         }, parent, value_type)
+
+        // handle array types
+        for(let type in types_offsets) {
+            if(!type.endsWith('[]'))    continue
+            if(type != value_type)      continue
+            return read_value({
+                type: 'inline_array',
+                values: undefined,
+                array_size: 0,
+                value_type: { value: value_type },
+            }, parent)
+        }
+
     }
 
     const lookup_variable = (node, parent, name, lookup_index = 0) => {

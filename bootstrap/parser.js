@@ -302,13 +302,28 @@ module.exports = tokens => {
             if(!is_var())       return; const name = skip_var().value
             if(!is_punc(':'))   return; skip_punc(':')
             if(!is_op('/'))     return; skip_op('/')
-            if(!is_type())      return; const ret_type = skip_type()
+            if(!is_type())      return; let ret_type = skip_type()
+
+            // return type is an array
+            if(is_punc('[')) {
+                skip_punc('[')
+                skip_punc(']')
+                ret_type.value += '[]'
+            }
+
             const location = tokens.save()
 
             const vars = parse_delimited(is_var, () => {
-                const arg_var = tokens.next()
-                const arg_type = skip_type()
-                const location = tokens.save()
+                let location = tokens.save()
+                let arg_var = tokens.next()
+                let arg_type = skip_type()
+                
+                // argument type is an array
+                if(is_punc('[')) {
+                    skip_punc('[')
+                    skip_punc(']')
+                    arg_type.value += '[]'
+                }
                 return { ...arg_var, location, arg_type: arg_type }
             }, ',')
 
@@ -602,16 +617,16 @@ module.exports = tokens => {
             
             if(is_type()) {
                 return {
-                    type: 'sizeof',
-                    value: skip_type(),
-                    location: location
+                    type        : 'sizeof',
+                    value       : skip_type(),
+                    location    : location
                 }
             }
             
             return {
-                type: 'sizeof',
-                value: parse_atom(),
-                location: location
+                type        : 'sizeof',
+                value       : parse_atom(),
+                location    : location
             }
         })
     }
@@ -640,6 +655,8 @@ module.exports = tokens => {
                 parse_datatypes() || 
                 parse_call() ||
                 parse_cast() ||
+                parse_inline_array() ||
+                parse_indexed() ||
                 parse_pointer()
 
             return {

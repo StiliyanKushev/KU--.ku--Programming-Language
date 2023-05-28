@@ -224,6 +224,15 @@ mmap:/num size num {
     ret @syscall 192, 0, size, 3, 34, (-1), 0
 }
 
+str2chr_arr:/chr[] text str {
+    :len/num = @strlen text
+    :chr_arr/chr[] = !chr[] @mmap $chr * len
+    for :i/num = 0, i < len, i++ {
+        chr_arr[i] = ?chr ((!num text) + $chr * i)
+    }
+    ret chr_arr
+}
+
 mremap:/num old_addr num, old_size num, new_size num, flags num, new_addr num {
     ret @syscall 163, old_addr, old_size, new_size, flags, new_addr, 0
 }
