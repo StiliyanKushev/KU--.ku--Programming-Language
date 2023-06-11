@@ -1,0 +1,711 @@
+include "../libstd/std.ku"
+
+# prepare terminal for "gaming mode"
+(@non_blocking_io)
+(@term_setraw)
+(@hide_cursor)
+
+# weird extended ascii string getters
+char_filled_square:/str {
+    :char/chr[] = [ !chr 226, !chr 150, !chr 135 ]
+    :string/str = @chr_arr2str char, 3
+    ret string + string
+}
+
+# drawing of each type of shape
+
+:TETROMINO_PIECE_SIZE/num = 4 * 4 * $num
+
+:TETROMINO_TYPE_I/num = 1
+:TETROMINO_TYPE_J/num = 2
+:TETROMINO_TYPE_L/num = 3
+:TETROMINO_TYPE_O/num = 4
+:TETROMINO_TYPE_S/num = 5
+:TETROMINO_TYPE_T/num = 6
+:TETROMINO_TYPE_Z/num = 7
+
+:TETROMINO_TYPE_I_DIMENSION/num = 4
+:TETROMINO_TYPE_J_DIMENSION/num = 3
+:TETROMINO_TYPE_L_DIMENSION/num = 3
+:TETROMINO_TYPE_O_DIMENSION/num = 2
+:TETROMINO_TYPE_S_DIMENSION/num = 3
+:TETROMINO_TYPE_T_DIMENSION/num = 3
+:TETROMINO_TYPE_Z_DIMENSION/num = 3
+
+#  . . . .
+# ▇▇▇▇▇▇▇▇
+#  . . . .
+#  . . . .
+
+get_piece_I:/num[] {
+    :grid/num[] = !num[] @mmap TETROMINO_PIECE_SIZE
+    grid[0] = 0
+    grid[1] = 0
+    grid[2] = 0
+    grid[3] = 0
+
+    grid[4] = TETROMINO_TYPE_I
+    grid[5] = TETROMINO_TYPE_I
+    grid[6] = TETROMINO_TYPE_I
+    grid[7] = TETROMINO_TYPE_I
+
+    grid[8]  = 0
+    grid[9]  = 0
+    grid[10] = 0
+    grid[11] = 0
+
+    grid[12] = 0
+    grid[13] = 0
+    grid[14] = 0
+    grid[15] = 0
+
+    ret grid
+}
+
+# ▇▇ . . .
+# ▇▇▇▇▇▇ .
+#  . . . .
+#  . . . .
+
+get_piece_J:/num[] {
+    :grid/num[] = !num[] @mmap TETROMINO_PIECE_SIZE
+    grid[0] = TETROMINO_TYPE_J
+    grid[1] = 0
+    grid[2] = 0
+    grid[3] = 0
+
+    grid[4] = TETROMINO_TYPE_J
+    grid[5] = TETROMINO_TYPE_J
+    grid[6] = TETROMINO_TYPE_J
+    grid[7] = 0
+
+    grid[8]  = 0
+    grid[9]  = 0
+    grid[10] = 0
+    grid[11] = 0
+
+    grid[12] = 0
+    grid[13] = 0
+    grid[14] = 0
+    grid[15] = 0
+
+    ret grid
+}
+
+#  . .▇▇ .
+# ▇▇▇▇▇▇ .
+#  . . . .
+#  . . . .
+
+get_piece_L:/num[] {
+    :grid/num[] = !num[] @mmap TETROMINO_PIECE_SIZE
+    grid[0] = 0
+    grid[1] = 0
+    grid[2] = TETROMINO_TYPE_L
+    grid[3] = 0
+
+    grid[4] = TETROMINO_TYPE_L
+    grid[5] = TETROMINO_TYPE_L
+    grid[6] = TETROMINO_TYPE_L
+    grid[7] = 0
+
+    grid[8]  = 0
+    grid[9]  = 0
+    grid[10] = 0
+    grid[11] = 0
+
+    grid[12] = 0
+    grid[13] = 0
+    grid[14] = 0
+    grid[15] = 0
+
+    ret grid
+}
+
+#  ▇▇▇▇. .
+#  ▇▇▇▇. .
+#  . . . .
+#  . . . .
+
+get_piece_O:/num[] {
+    :grid/num[] = !num[] @mmap TETROMINO_PIECE_SIZE
+    grid[0] = TETROMINO_TYPE_O
+    grid[1] = TETROMINO_TYPE_O
+    grid[2] = 0
+    grid[3] = 0
+
+    grid[4] = TETROMINO_TYPE_O
+    grid[5] = TETROMINO_TYPE_O
+    grid[6] = 0
+    grid[7] = 0
+
+    grid[8]  = 0
+    grid[9]  = 0
+    grid[10] = 0
+    grid[11] = 0
+
+    grid[12] = 0
+    grid[13] = 0
+    grid[14] = 0
+    grid[15] = 0
+
+    ret grid
+}
+
+#  .▇▇▇▇ .
+# ▇▇▇▇ . .
+#  . . . .
+#  . . . .
+
+get_piece_S:/num[] {
+    :grid/num[] = !num[] @mmap TETROMINO_PIECE_SIZE
+    grid[0] = 0
+    grid[1] = TETROMINO_TYPE_S
+    grid[2] = TETROMINO_TYPE_S
+    grid[3] = 0
+
+    grid[4] = TETROMINO_TYPE_S
+    grid[5] = TETROMINO_TYPE_S
+    grid[6] = 0
+    grid[7] = 0
+
+    grid[8]  = 0
+    grid[9]  = 0
+    grid[10] = 0
+    grid[11] = 0
+
+    grid[12] = 0
+    grid[13] = 0
+    grid[14] = 0
+    grid[15] = 0
+
+    ret grid
+}
+
+#  .▇▇ . .
+# ▇▇▇▇▇▇ .
+#  . . . .
+#  . . . .
+
+get_piece_T:/num[] {
+    :grid/num[] = !num[] @mmap TETROMINO_PIECE_SIZE
+    grid[0] = 0
+    grid[1] = TETROMINO_TYPE_T
+    grid[2] = 0
+    grid[3] = 0
+
+    grid[4] = TETROMINO_TYPE_T
+    grid[5] = TETROMINO_TYPE_T
+    grid[6] = TETROMINO_TYPE_T
+    grid[7] = 0
+
+    grid[8]  = 0
+    grid[9]  = 0
+    grid[10] = 0
+    grid[11] = 0
+
+    grid[12] = 0
+    grid[13] = 0
+    grid[14] = 0
+    grid[15] = 0
+
+    ret grid
+}
+
+# ▇▇▇▇ . .
+#  .▇▇▇▇ .
+#  . . . .
+#  . . . .
+
+get_piece_Z:/num[] {
+    :grid/num[] = !num[] @mmap TETROMINO_PIECE_SIZE
+    grid[0] = TETROMINO_TYPE_Z
+    grid[1] = TETROMINO_TYPE_Z
+    grid[2] = 0
+    grid[3] = 0
+
+    grid[4] = 0
+    grid[5] = TETROMINO_TYPE_Z
+    grid[6] = TETROMINO_TYPE_Z
+    grid[7] = 0
+
+    grid[8]  = 0
+    grid[9]  = 0
+    grid[10] = 0
+    grid[11] = 0
+
+    grid[12] = 0
+    grid[13] = 0
+    grid[14] = 0
+    grid[15] = 0
+
+    ret grid
+}
+
+get_char_from_tetr:/str code num {
+    if code == 0 {
+        ret "\x1b[2C"
+    }
+    
+    :string/str
+
+    if code == TETROMINO_TYPE_I {
+        string = "\x1b[36m"
+    }
+    else if code == TETROMINO_TYPE_J {
+        string = "\x1b[34m"
+    }
+    else if code == TETROMINO_TYPE_L {
+        string = "\x1b[33m"
+    }
+    else if code == TETROMINO_TYPE_O {
+        string = "\x1b[93m"
+    }
+    else if code == TETROMINO_TYPE_S {
+        string = "\x1b[92m"
+    }
+    else if code == TETROMINO_TYPE_T {
+        string = "\x1b[95m"
+    }
+    else if code == TETROMINO_TYPE_Z {
+        string = "\x1b[91m"
+    }
+
+    string = string + (@char_filled_square)
+    ret string
+}
+
+print_tetr:/bol tetr num[] {
+    for :i/num = 0, i < 4 * 4, i++ {
+        if i % 4 == 0 && i >= 4 {
+            @out "\x1b[8D\x1b[1B"
+        }
+        @out @get_char_from_tetr tetr[i]
+    }
+    @out "\x1b[8D\x1b[1B"
+}
+
+:GRID_ROWS/num = 20
+:GRID_COLS/num = 10
+:GAME_GRID/num[] = !num[] @mmap GRID_ROWS * GRID_COLS * $num
+:CURRENT_SCORE/num = 0
+:NEXT_SHAPE/num[] = [0]
+:NEXT_SHAPE_DIMENSION/num = 0
+:NEXT_SHAPE_ID/num = 0
+:CURR_SHAPE/num[] = [0]
+:CURR_SHAPE_DIMENSION/num = 0
+:CURR_SHAPE_ROW/num = 0
+:CURR_SHAPE_COL/num = (GRID_COLS / 2) - 1
+:IS_GAME_OVER/bol = false
+
+get_rand_shape:/num SHAPE_PTR num, SHAPE_D_PTR num {
+    @munmap ?num SHAPE_PTR, TETROMINO_PIECE_SIZE
+    :random_number/num = @random 1, 7
+    if random_number == TETROMINO_TYPE_I {
+        ::SHAPE_D_PTR /num = TETROMINO_TYPE_I_DIMENSION
+        ::SHAPE_PTR /num[] = (@get_piece_I)
+    }
+    else if random_number == TETROMINO_TYPE_J {
+        ::SHAPE_D_PTR /num = TETROMINO_TYPE_J_DIMENSION
+        ::SHAPE_PTR /num[] = (@get_piece_J)
+    }
+    else if random_number == TETROMINO_TYPE_L {
+        ::SHAPE_D_PTR /num = TETROMINO_TYPE_L_DIMENSION
+        ::SHAPE_PTR /num[] = (@get_piece_L)
+    }
+    else if random_number == TETROMINO_TYPE_O {
+        ::SHAPE_D_PTR /num = TETROMINO_TYPE_O_DIMENSION
+        ::SHAPE_PTR /num[] = (@get_piece_O)
+    }
+    else if random_number == TETROMINO_TYPE_S {
+        ::SHAPE_D_PTR /num = TETROMINO_TYPE_S_DIMENSION
+        ::SHAPE_PTR /num[] = (@get_piece_S)
+    }
+    else if random_number == TETROMINO_TYPE_T {
+        ::SHAPE_D_PTR /num = TETROMINO_TYPE_T_DIMENSION
+        ::SHAPE_PTR /num[] = (@get_piece_T)
+    }
+    else if random_number == TETROMINO_TYPE_Z {
+        ::SHAPE_D_PTR /num = TETROMINO_TYPE_Z_DIMENSION
+        ::SHAPE_PTR /num[] = (@get_piece_Z)
+    }
+    ret random_number
+}
+
+# caclulate next shape
+NEXT_SHAPE_ID = @get_rand_shape &NEXT_SHAPE, &NEXT_SHAPE_DIMENSION
+
+# caclulate first current shape
+@get_rand_shape &CURR_SHAPE, &CURR_SHAPE_DIMENSION
+
+draw:/bol {
+    # draw the rest of the board + score
+    for :r/num = 0, r < GRID_ROWS, r++ {
+        @out " <!"
+        for :c/num = 0, c < GRID_COLS, c++ {
+            :index/num = (GRID_COLS * r) + c
+            # empty
+            if GAME_GRID[index] == 0 {
+                @out " ."
+            }
+            # filled
+            else if IS_GAME_OVER == false {
+                @out @get_char_from_tetr GAME_GRID[index]
+                @out "\x1b[0m"
+            }
+            else {
+                @out "\x1b[90m"
+                @out (@char_filled_square)
+                @out "\x1b[0m"
+            }
+        }
+        @out "!>  "
+
+        # print logo
+        if r == 0 {
+            @out "\x1b[107m"    # white background
+            @out "\x1b[30m"     # black color
+            @out "\x1b[1m"      # bold
+            @out "  Tetris in (KuLang)  "
+            @out "\x1b[40m"     # back to black background
+            @out "\x1b[0m"      # default
+        }
+        # print credits
+        else if r == 2 {
+            @out "\x1b[90m"     # gray color
+            @out "   @StiliyanKushev"
+            @out "\x1b[40m"     # back to black background
+            @out "\x1b[0m"      # default
+        }
+        # print divider
+        else if r == 4 {
+            @out "\x1b[90m"     # gray color
+            @out "======================"
+            @out "\x1b[0m"      # default
+        }
+        # print score
+        else if r == 6 {
+            @out "Score: " + @num2str CURRENT_SCORE
+        }
+        # print next shape
+        else if r == 8 {
+            if IS_GAME_OVER == false {
+                @out "Next shape:"
+            }
+            else {
+                @out "Game Over!"
+            }
+        }
+        # print next shape
+        else if r == 10 && IS_GAME_OVER == false {
+            @out "\x1b[s"
+            @out " "
+            @print_tetr NEXT_SHAPE, NEXT_SHAPE_DIMENSION
+            @out "\x1b[u"
+            @out "\x1b[0m"      # default
+        }
+
+        @outln " "
+    }
+    @out " <!"
+    for :c/num = 0, c < GRID_COLS, c++ { 
+        @out "=="
+    }
+    @outln "!>"
+    @out "   "
+    for :c/num = 0, c < GRID_COLS, c++ { 
+        @out "\\/"
+    }
+    @outln "  "
+
+    if IS_GAME_OVER == false {
+        # draw current shape
+        :TRANSLATE_CURR_COL/num = (CURR_SHAPE_COL * 2) + 4
+        @out "\x1b[s"
+        @out "\x1b[" + (@num2str CURR_SHAPE_ROW) + ";" + (@num2str TRANSLATE_CURR_COL) + "H"
+        @print_tetr CURR_SHAPE, CURR_SHAPE_DIMENSION
+        @out "\x1b[u"
+        @out "\x1b[0m"      # default
+    }
+}
+
+:IS_OVERLAPPING/bol = false
+:IS_OVERFLOWING/bol = false
+:IS_TOUCHING_TOP/bol = false
+:IS_TOUCHING_LEFT/bol = false
+:IS_TOUCHING_RIGHT/bol = false
+:IS_TOUCHING_BOTTOM/bol = false
+
+calc_border_flags:/bol {
+
+    IS_OVERLAPPING = false
+    IS_OVERFLOWING = false
+    IS_TOUCHING_TOP = false
+    IS_TOUCHING_LEFT = false
+    IS_TOUCHING_RIGHT = false
+    IS_TOUCHING_BOTTOM = false
+
+    for :i/num = 0, i < 4, i++ {
+        for :j/num = 0, j < 4, j++ {
+            :index/num = (4 * i) + j
+            if CURR_SHAPE[index] != 0 {
+                :real_row/num = CURR_SHAPE_ROW + i
+                :real_col/num = CURR_SHAPE_COL + j
+
+                if real_col <= 0 {
+                    IS_TOUCHING_LEFT = true
+                }
+                else if real_col >= GRID_COLS - 1 {
+                    IS_TOUCHING_RIGHT = true
+                }
+                else if real_row <= 0 {
+                    IS_TOUCHING_TOP = true
+                }
+                else if real_row >= GRID_ROWS - 1 {
+                    IS_TOUCHING_BOTTOM = true
+                }
+
+                if 
+                    real_col < 0 ||
+                    real_col > GRID_COLS - 1 ||
+                    real_row < 0 || 
+                    real_row > GRID_ROWS - 1
+                {
+                    IS_OVERFLOWING = true
+                }
+
+                :real_index/num = (GRID_COLS * (real_row - 1)) + real_col
+                if GAME_GRID[real_index] != 0 {
+                    IS_OVERLAPPING = true
+                }
+            }
+        }
+    }
+}
+
+check_clear_line:/bol {
+    for :r/num = GRID_ROWS - 1, r >= 0, r-- {
+        :is_row_full/bol = true
+        for :c/num = 0, c < GRID_COLS, c++ {
+            :index/num = (GRID_COLS * r) + c
+            if GAME_GRID[index] == 0 {
+                is_row_full = false
+                break
+            }
+        }
+
+        if is_row_full {
+            # clear the row
+            CURRENT_SCORE++
+            for :c/num = 0, c < GRID_COLS, c++ {
+                :index/num = (GRID_COLS * r) + c
+                GAME_GRID[index] = 0
+            }
+
+            # move uppper rows down one row
+            for :rr/num = r, rr >= 0, rr-- {
+                for :cc/num = 0, cc < GRID_COLS, cc++ {
+                    :index/num = (GRID_COLS * rr) + cc
+                    :upper_index/num = (GRID_COLS * (rr - 1)) + cc
+                    GAME_GRID[index] = GAME_GRID[upper_index]
+                }
+            }
+
+            r++
+        }
+    }
+}
+
+place_shape_to_grid:/bol {
+    for :i/num = 0, i < 4, i++ {
+        for :j/num = 0, j < 4, j++ {
+            :index/num = (4 * i) + j
+            if CURR_SHAPE[index] != 0 {
+                :real_row/num = CURR_SHAPE_ROW + i - 2
+                :real_col/num = CURR_SHAPE_COL + j
+                :real_index/num = (GRID_COLS * real_row) + real_col
+                GAME_GRID[real_index] = CURR_SHAPE[index]
+            }
+        }
+    }
+
+    (@check_clear_line)
+}
+
+is_curr_stacked:/bol {
+    for :i/num = 0, i < 4, i++ {
+        for :j/num = 0, j < 4, j++ {
+            :index/num = (4 * i) + j
+            if CURR_SHAPE[index] != 0 {
+                :real_row/num = CURR_SHAPE_ROW + i - 2
+                :real_col/num = CURR_SHAPE_COL + j
+                :real_index/num = (GRID_COLS * real_row) + real_col
+
+                :below_row/num = CURR_SHAPE_ROW + i - 1
+                :below_index/num = (GRID_COLS * below_row) + real_col
+
+                if  GAME_GRID[real_index] != 0 || 
+                    GAME_GRID[below_index] != 0 {
+                    ret true
+                }
+            }
+        }
+    }
+}
+
+check_bottom_placement:/bol {
+    :SHOULD_BE_PLACED/bol = 
+        (@is_curr_stacked) || (IS_TOUCHING_BOTTOM && IS_OVERFLOWING)
+
+    if SHOULD_BE_PLACED {
+        (@place_shape_to_grid)
+        CURR_SHAPE_ROW = 0
+        CURR_SHAPE_COL = (GRID_COLS / 2) - 1
+        CURR_SHAPE_DIMENSION = NEXT_SHAPE_DIMENSION
+
+        if NEXT_SHAPE_ID == TETROMINO_TYPE_I {
+            @munmap ?num &CURR_SHAPE, TETROMINO_PIECE_SIZE
+            CURR_SHAPE = (@get_piece_I)
+        }
+        else if NEXT_SHAPE_ID == TETROMINO_TYPE_J {
+            @munmap ?num &CURR_SHAPE, TETROMINO_PIECE_SIZE
+            CURR_SHAPE = (@get_piece_J)
+        }
+        else if NEXT_SHAPE_ID == TETROMINO_TYPE_L {
+            @munmap ?num &CURR_SHAPE, TETROMINO_PIECE_SIZE
+            CURR_SHAPE = (@get_piece_L)
+        }
+        else if NEXT_SHAPE_ID == TETROMINO_TYPE_O {
+            @munmap ?num &CURR_SHAPE, TETROMINO_PIECE_SIZE
+            CURR_SHAPE = (@get_piece_O)
+        }
+        else if NEXT_SHAPE_ID == TETROMINO_TYPE_S {
+            @munmap ?num &CURR_SHAPE, TETROMINO_PIECE_SIZE
+            CURR_SHAPE = (@get_piece_S)
+        }
+        else if NEXT_SHAPE_ID == TETROMINO_TYPE_T {
+            @munmap ?num &CURR_SHAPE, TETROMINO_PIECE_SIZE
+            CURR_SHAPE = (@get_piece_T)
+        }
+        else if NEXT_SHAPE_ID == TETROMINO_TYPE_Z {
+            @munmap ?num &CURR_SHAPE, TETROMINO_PIECE_SIZE
+            CURR_SHAPE = (@get_piece_Z)
+        }
+        
+        NEXT_SHAPE_ID = @get_rand_shape &NEXT_SHAPE, &NEXT_SHAPE_DIMENSION
+    }
+}
+
+rotate_piece:/num[] piece_ptr num, D num {
+    :piece/num[] = ?num[] piece_ptr
+    :rotated/num[] = !num[] @mmap TETROMINO_PIECE_SIZE
+    
+    for :row/num = 0, row < D, row++ {
+        for :col/num = 0, col < D, col++ {
+            :cur_index/num = (4 * row) + col
+            :new_index/num = (4 * col) + (D - 1 - row)
+            rotated[new_index] = piece[cur_index]
+        }
+    }
+
+    # temporarily set curr shape to new one
+    # and check if we overflow any of the bordersbol
+    :temp_curr/num[] = CURR_SHAPE
+    CURR_SHAPE = rotated
+    (@calc_border_flags)
+    CURR_SHAPE = temp_curr
+
+    if IS_OVERFLOWING || IS_OVERLAPPING {
+        ret
+    }
+
+    @munmap ?num piece_ptr, TETROMINO_PIECE_SIZE
+    ::piece_ptr /num[] = rotated
+}
+
+check_endgame:/bol {
+    if IS_TOUCHING_TOP == false {
+        ret false
+    }
+
+    if IS_OVERLAPPING == false {
+        ret false
+    }
+
+    ret true
+}
+
+show_end_game:/bol {
+    IS_GAME_OVER = true
+    (@clear)
+    (@draw)
+    (@show_cursor)
+    @exit 0
+}
+
+:GAME_SLEEP_MS/num = 10
+
+# buttons
+:BUTTON_LEFT/num    = 4479771
+:BUTTON_RIGHT/num   = 4414235
+:BUTTON_UP/num      = 4283163
+:BUTTON_DOWN/num    = 4348699
+
+handle_inputs:/bol {
+    :key_pressed/num = ?num (@rline)
+    if key_pressed == 0 {
+        # no key was pressed
+        GAME_SLEEP_MS = 10
+        ret
+    }
+
+    if key_pressed == BUTTON_LEFT {
+        if IS_TOUCHING_LEFT {
+            ret
+        }
+        CURR_SHAPE_COL--
+    }
+    else if key_pressed == BUTTON_RIGHT {
+        if IS_TOUCHING_RIGHT {
+            ret
+        }
+        CURR_SHAPE_COL++
+    }
+    else if key_pressed == BUTTON_UP {
+        @rotate_piece &CURR_SHAPE, CURR_SHAPE_DIMENSION
+    }
+    else if key_pressed == BUTTON_DOWN {
+        CURR_SHAPE_ROW++
+        GAME_SLEEP_MS = 5
+    }
+
+    (@check_bottom_placement)
+
+    (@clear)
+    (@draw)
+}
+
+:delta/num = 0
+
+(@clear)
+(@draw)
+
+while true {    
+    (@calc_border_flags)
+
+    if (@check_endgame) {
+        (@show_end_game)
+    }
+
+    if delta == 10000 {
+        (@clear)
+        (@draw)
+        CURR_SHAPE_ROW++
+        delta = 0
+
+        (@check_bottom_placement)
+    }
+    (@handle_inputs)
+    @sleep GAME_SLEEP_MS
+    delta++
+}

@@ -1,7 +1,7 @@
 module.exports = tokens => {
     // the z-index of operators basically
     const PRECEDENCE = {
-        '=': 1, '&': 1, '|': 1, '||': 2, '&&': 3,
+        '=': 1, '&': 1, '^': 1, '|': 1, '||': 2, '&&': 3,
         '<': 7, '>': 7, '<=': 7, '>=': 7, '==': 7, '!=': 7,
         '+': 10, '-': 10,
         '*': 20, '/': 20, '%': 20,
@@ -245,10 +245,10 @@ module.exports = tokens => {
                 left =  parse_call() || 
                         parse_prefix() || 
                         parse_postfix() || 
+                        parse_indexed() ||
                         parse_datatypes() ||
                         parse_pointer() ||
                         parse_cast() ||
-                        parse_indexed() ||
                         parse_sizeof() ||
                         parse_signed()
                 if(!left)       return 
@@ -285,10 +285,10 @@ module.exports = tokens => {
                     parse_call() || 
                     parse_prefix() || 
                     parse_postfix() || 
+                    parse_indexed() ||
                     parse_datatypes() || 
                     parse_pointer() ||
                     parse_cast() ||
-                    parse_indexed() ||
                     parse_sizeof() ||
                     parse_signed(), PRECEDENCE[op]),
                 location : location
@@ -652,11 +652,11 @@ module.exports = tokens => {
             const value = 
                 parse_binary() || 
                 parse_signed() ||
+                parse_indexed() ||
                 parse_datatypes() || 
                 parse_call() ||
                 parse_cast() ||
                 parse_inline_array() ||
-                parse_indexed() ||
                 parse_pointer()
 
             return {

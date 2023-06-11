@@ -23,8 +23,8 @@ struct person {
 ------------
 
 :temp/num = 123
-@outln @num2str sizeof temp    # prints 4
-@outln @num2str sizeof dec     # prints 4
+@outln @num2str $temp    # prints 4
+@outln @num2str $dec     # prints 4
 
 -- throw error --
 -----------------

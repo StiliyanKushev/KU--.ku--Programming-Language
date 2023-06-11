@@ -1,28 +1,5 @@
 include "../libstd/std.ku"
 
-# uses fcntl syscall to apply O_NONBLOCK to stdin
-non_blocking_io:/num {
-    :flags/num = @fcntl 0, 3, 0
-    @fcntl 0, 4, flags | 2048
-    ret flags
-}
-
-# takes flags number and uses fcntl to apply them
-revert_io:/bol flags num {
-    @fcntl 0, 4, flags
-}
-
-# generate random number between MIN and MAX
-random:/num min num, max num {
-    :random_number/num
-    @syscall 355, &random_number, 4, 0, 0, 0, 0
-    if random_number < 0 {
-        random_number = random_number * (-1)
-    }
-    random_number = (random_number % (max - min + 1)) + min
-    ret random_number
-}
-
 (@non_blocking_io)
 
 # global definitions
@@ -171,20 +148,24 @@ update_snake:/bol {
 
 # drawing definitions
 draw_grid:/bol {
+    (@hide_cursor)
+    :grid/str
     for :i/num = 0, i < GAME_ROWS, i++ {
         for :j/num = 0, j < GAME_COLS, j++ {
             if FOOD_ROW == i && FOOD_COL == j {
-                @out @chr2str CELL_TYPE_FOOD
+                grid = grid + @chr2str CELL_TYPE_FOOD
             }
             else if @is_snake_at i, j {
-                @out @chr2str CELL_TYPE_BODY
+                grid = grid + @chr2str CELL_TYPE_BODY
             }
             else {
-                @out @chr2str CELL_TYPE_EMPTY
+                grid = grid + @chr2str CELL_TYPE_EMPTY
             }
         }
-        @outln ""
+        grid = grid + "\n"
     }
+    @out grid
+    (@show_cursor)
 }
 
 handle_inputs:/bol {

@@ -1078,6 +1078,9 @@ module.exports.generate_asm = (ast, options) => {
         } else if(node.operator == '&') {
             type = 'num'
             req_type = ['num']
+        } else if(node.operator == '^') {
+            type = 'num'
+            req_type = ['num']
         } else if(node.operator == '&&') {
             type = 'bol'
             req_type = ['bol']
@@ -1208,6 +1211,7 @@ module.exports.generate_asm = (ast, options) => {
                 }
             } else if(node.operator == '/') {
                 if(type == 'num') {
+                    write_code(`xor edx, edx`)
                     write_code(`div ebx ;; /`)
                 } else if(type == 'dec') {
                     util_round_decimal_binary()
@@ -1266,6 +1270,12 @@ module.exports.generate_asm = (ast, options) => {
             } else if(node.operator == '&') {
                 if(type == 'num') {
                     write_code(`and eax, ebx ;; &`)
+                } else {
+                    throw_unsupported_operation(node, parent)
+                }
+            } else if(node.operator == '^') {
+                if(type == 'num') {
+                    write_code(`xor eax, ebx ;; ^`)
                 } else {
                     throw_unsupported_operation(node, parent)
                 }
@@ -2121,7 +2131,6 @@ module.exports.generate_asm = (ast, options) => {
             this.context.functions.set("syscall", this.syscall)
             this.context.functions.set("inner_strlen", this.inner_strlen)
             this.context.functions.set("strapnd", this.strapnd)
-            this.context.functions.set("rkey", this.rkey)
         }
     
         make_arg(name, type) {
@@ -2196,111 +2205,6 @@ module.exports.generate_asm = (ast, options) => {
             })
         }
 
-        get rkey() {
-            return this.make_func({
-                name: 'rkey',
-                ret_type: 'str',
-                args: [],
-                write_internal: (world, data) => {
-                    // Allocate space on the stack for orig_termios
-                    write_code(`sub esp, 44`)
-                    world.context.var_offset += 44
-                
-                    // Save original terminal settings
-                    write_code(`mov eax, 54`)       
-                    write_code(`xor ebx, ebx`)
-                    write_code(`mov ecx, 0x5401`)
-                    write_code(`mov edx, esp`)
-                    write_code(`int 0x80`)
-
-                    write_code(`mov eax, esp`)
-                    read_var({
-                        mode: 'declare',
-                        name: 'struct',
-                        value_type: { value: 'str' },
-                        value: {
-                            type: 'override',
-                            override: {
-                                write_all: () => {} 
-                            }
-                        }
-                    }, world).write_all()
-                
-                    // Set terminal to raw mode
-                    read_value({
-                        type: 'var',
-                        value: 'struct'
-                    }, world).write_all()
-                    write_code(`and dword [eax + 12], ~(0x00000008 | 0x00000002)`)
-                    write_code(`mov edx, eax`)
-                    write_code(`mov ebx, 0`)
-                    write_code(`mov eax, 54`)
-                    write_code(`mov ecx, 0x5402`)
-                    write_code(`int 0x80`)
-
-                    // Store to string so we can return it
-                    write_code(`push ebp`)
-                    write_code(`xor ebx, ebx`)
-                    write_code(`mov ecx, 8`)
-                    write_code(`mov edx, 0x3`)
-                    write_code(`mov esi, 0x22`)
-                    write_code(`mov edi, -1`)
-                    write_code(`xor ebp, ebp`)
-                    write_code(`mov eax, 192`)
-                    write_code(`int 0x80`)
-                    write_code(`pop ebp`)
-
-                    // store the allocated space address to a variable
-                    read_var({
-                        mode: 'declare',
-                        name: 'addr',
-                        value_type: { value: 'str' },
-                        value: {
-                            type: 'override',
-                            override: {
-                                write_all: () => {} // default eax
-                            }
-                        }
-                    }, world).write_all()
-
-                    read_value({
-                        type: 'var',
-                        value: 'addr'
-                    }, world).write_all()
-                    
-                    // add the string terminator at the end
-                    write_code(`mov byte [eax + 4], 0x0`)
-
-                    // Read a single character from stdin
-                    write_code(`mov ecx, eax`)
-                    write_code(`mov eax, 3`)
-                    write_code(`xor ebx, ebx`)
-                    write_code(`mov edx, 1`)
-                    write_code(`int 0x80`)
-
-                    read_value({
-                        type: 'var',
-                        value: 'struct'
-                    }, world).write_all()
-
-                    // Restore terminal settings
-                    write_code(`mov edx, eax`)
-                    write_code(`mov eax, 54`)
-                    write_code(`xor ebx, ebx`)
-                    write_code(`mov ecx, 0x5402`)
-                    write_code(`int 0x80`)
-                    
-                    // return read address
-                    read_value({
-                        type: 'var',
-                        value: 'addr'
-                    }, world).write_all()
-
-                    write_code(`jmp ${data.label_ret_func}`)
-                }
-            })
-        }
-    
         get inner_strlen() {
             const loop_start = create_label()
             const loop_end = create_label()
