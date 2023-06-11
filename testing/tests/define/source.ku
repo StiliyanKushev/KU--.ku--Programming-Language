@@ -1,3 +1,5 @@
+include "../../../libstd/std.ku"
+
 :space/str = " "
 :number/num = 123
 :var/str = "Hello" + space + (@num2str number) + space + "World!"

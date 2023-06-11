@@ -1,3 +1,5 @@
+include "../../../libstd/std.ku"
+
 :var/str = ""
 var = "1"
 @out var

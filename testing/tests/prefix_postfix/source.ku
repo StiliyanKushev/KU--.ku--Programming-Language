@@ -1,6 +1,7 @@
+include "../../../libstd/std.ku"
+
 :i/num = 0
 :j/num = 0
-
 
 @out @num2str i++
 @out @num2str ++i

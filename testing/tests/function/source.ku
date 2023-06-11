@@ -1,3 +1,5 @@
+include "../../../libstd/std.ku"
+
 func:/str {
     func1:/num {
         ret 123

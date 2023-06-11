@@ -692,6 +692,7 @@ module.exports.generate_asm = (ast, options) => {
         let ret_size   = types_offsets[ret_type]
         let args       = node.vars
 
+        const label_skip_func  = `__${name}__skip` + create_label()
         const label_start_func  = `__${name}__begin` + create_label()
         const label_ret_func    = `__${name}__ret` + create_label()
 
@@ -715,6 +716,8 @@ module.exports.generate_asm = (ast, options) => {
             write_all: () => {
                 let old_write_code = write_code
                 write_code = write_in_function
+
+                write_code(`jmp ${label_skip_func}`)
                 write_code(`${label_start_func}:`)
                 write_code(`push ebp`)
                 write_code(`mov ebp, esp`)
@@ -760,6 +763,7 @@ module.exports.generate_asm = (ast, options) => {
                 write_code(`mov esp, ebp`)
                 write_code(`pop ebp`)
                 write_code(`ret`)
+                write_code(`${label_skip_func}:`)
                 write_code = old_write_code
             }
         }

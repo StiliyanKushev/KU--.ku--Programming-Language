@@ -1,3 +1,5 @@
+include "../../../libstd/std.ku"
+
 :i/num = 0
 
 func:/bol {
