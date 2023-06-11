@@ -9,6 +9,9 @@
 			"include": "#strings"
 		},
         {
+			"include": "#chars"
+		},
+        {
 			"include": "#comments"
 		},
         {
@@ -31,13 +34,13 @@
 		"keywords": {
 			"patterns": [{
 				"name": "keyword.control.ku",
-				"match": "(\\bif|\\belse|\\bwhile|\\bfor|\\bret|\\bbreak|\\bcontinue|\\bnum|\\bstr|\\bbol|\/num|\/str|\/bol)\\b"
+				"match": "(\\bif|\\belse|\\bwhile|\\bfor|\\bret|\\bbreak|\\bcontinue|\\bnum|\\bstr|\\bchr|\\bdec|\\bbol|\\binclude|\/num|\/str|\/bol|\/chr|\/dec|\\!num|\\!str|\\!bol|\\!chr|\\!dec|\\?num|\\?str|\\?bol|\\?chr|\\?dec)\\b"
 			}]
 		},
         "numbers": {
 			"patterns": [{
 				"name": "constant.numeric.ku",
-				"match": "\\b(\\d+)\\b"
+				"match": "\\b(\\d\\.?)(\\d?)+\\b"
 			}]
 		},
         "boolean": {
@@ -56,6 +59,17 @@
 			"name": "string.quoted.double.ku",
 			"begin": "\"",
 			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.ku",
+					"match": "\\\\."
+				}
+			]
+		},
+        "chars": {
+			"name": "string.quoted.double.ku",
+			"begin": "'",
+			"end": "'",
 			"patterns": [
 				{
 					"name": "constant.character.escape.ku",

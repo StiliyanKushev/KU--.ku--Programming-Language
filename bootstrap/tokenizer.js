@@ -1,5 +1,5 @@
 module.exports = reader => {
-    var keywords = ' if else for while true false ret break continue num str bol '
+    var keywords = ' if else for while true false ret break continue num str bol chr dec include '
 
     // navigation functions
     const next = () => read_next()
@@ -8,8 +8,8 @@ module.exports = reader => {
  
     // validation functions
     const is_whitespace = ch => ' \t\n'.indexOf(ch) >= 0
-    const is_punc       = ch => ':,(){}[]@'.indexOf(ch) >= 0
-    const is_op_char    = ch => '+-*/%=&|<>!?'.indexOf(ch) >= 0
+    const is_punc       = ch => ':,(){}[]@$'.indexOf(ch) >= 0
+    const is_op_char    = ch => '+-*/%=&|<>!?^'.indexOf(ch) >= 0
     const is_id_start   = ch => /[a-z_A-Z]/i.test(ch)
     const is_digit      = ch => /[0-9]/i.test(ch)
     const is_keyword    = wd => keywords.indexOf(' ' + wd + ' ') >= 0
@@ -33,6 +33,8 @@ module.exports = reader => {
         let id = read_while(ch => is_id_start(ch) || is_digit(ch))
         return { type: is_keyword(id) ? 'kw' : 'var', value: id }
     }
+    // returns char token
+    const read_char = () => ({ type: 'chr', value: read_escaped('\'') })
 
     // returns string token
     const read_string = () => ({ type: 'str', value: read_escaped('"') })
@@ -41,6 +43,8 @@ module.exports = reader => {
     const read_number = () => {
         let has_dot = false
         let number = read_while(ch => ch == '.' ? has_dot ? false : (has_dot = true) : is_digit(ch))
+        if(has_dot)
+        return { type: 'dec', value: parseFloat(number) }
         return { type: 'num', value: parseFloat(number) }
     }
 
@@ -83,6 +87,7 @@ module.exports = reader => {
         let ch = reader.peek()
         if (ch == '#') { skip_comment(); return read_next() }
         if (ch == '"') return read_string()
+        if (ch == '\'') return read_char()
         if (is_digit(ch)) return read_number() 
         if (is_id_start(ch)) return read_id()
         if (is_punc(ch)) return { type: 'punc', value: reader.next() }

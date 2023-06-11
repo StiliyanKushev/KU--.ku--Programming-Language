@@ -1,0 +1,420 @@
+strlen:/num text str {
+    :i/num = 0
+    while true {
+        if (!num ?chr (+text) + i) == 0 {
+            ret i
+        }
+        i++
+    }
+}
+
+strcmp:/bol lstr str, rstr str {
+    :lstrlen/num = (@strlen lstr)
+
+    if lstrlen != (@strlen rstr) {
+        ret false
+    }
+    
+    for :i/num = 0, i < lstrlen, i++ {
+        if (?chr (+lstr) + i) != (?chr (+rstr) + i) {
+            ret false
+        }
+    }
+
+    ret true
+}
+
+lcase:/str text str {
+    for :i/num = 0, i < (@strlen text), i++ {
+        :char/chr = ?chr ((!num text) + i)
+
+        # between A to Z
+        if ((!num char) >= 65) && ((!num char) <= 90) {
+            ::(!num text) + i /chr = !chr ((!num char) + 32)
+        }
+    }
+    ret text
+}
+
+ucase:/str text str {
+    for :i/num = 0, i < (@strlen text), i++ {
+        :char/chr = ?chr ((!num text) + i)
+
+        # between a to z
+        if ((!num char) >= 97) && ((!num char) <= 122) {
+            ::(!num text) + i /chr = !chr ((!num char) - 32)
+        }
+    }
+    ret text
+}
+
+out:/bol output str {
+    @syscall 4, 1, (+output), (@strlen output), 0, 0, 0
+}
+
+outln:/bol output str {
+    @out output + "\n"
+}
+
+clear:/bol {
+    @out "\x1bc"
+}
+
+chr2str:/str char chr {
+    :to_str/str = ""
+    ::(+to_str)/chr = char
+    ret to_str
+}
+
+strcut:/str text str, len num {
+    :final/str = ""
+    for :i/num = 0, i < len, i++ {
+        final = final + @chr2str ?chr (!num text) + i
+    }
+    ret final
+}
+
+bol2str:/str boolean bol {
+    if boolean {
+        ret "true"
+    }
+    ret "false"
+}
+
+num2str:/str number num {
+    if number == 0 {
+        ret "0"
+    }
+
+    :nstr/str
+    :neg/bol = number < 0
+
+    if neg {
+        number = number * (-1)
+    }
+
+    :curr/num = number                      
+
+    while curr > 0 {
+        :tdec/dec = !dec curr
+        :tres/dec = tdec / 10.0                
+        :tnum/num = !num tres                  
+        :trem/dec = (tres - !dec tnum) * 10.0  
+        :digt/num = !num trem                  
+        nstr = " " + nstr
+        ::!num nstr /chr = !chr (digt + !num '0')
+        curr = tnum
+    }
+
+    if neg {
+        nstr = "-" + nstr
+    }
+
+    ret nstr
+}
+
+dec2str:/str decimal dec {
+    :int/num = !num decimal     
+    :rem/dec = decimal - !dec int
+    while true {
+        rem = (rem * 10.0)
+        if (rem % 1.0) == 0.0 {
+            break
+        }
+    }
+    :remint/num = !num rem
+    ret (@num2str int) + "." + @num2str remint
+}
+
+str2num:/num text str {
+    :textlen/num = @strlen text
+    :result/num
+    :si/num = 0
+    :neg/bol
+
+    if (?chr (+text)) == '-' {
+        si = 1
+        neg = true
+    }
+    else if (?chr (+text)) == '+' {
+        si = 1
+    }
+
+    for :i/num = si, i < textlen, i++ {
+        :ascii_num/num = !num ?chr (+@strcut (?str (+text) + i), 1)
+        ascii_num = ascii_num - 48
+        for :j/num = i, j < textlen - 1, j++ {
+            ascii_num = ascii_num * 10
+        }
+        result = result + ascii_num
+    }
+
+    if si == 1 && result == 0 {
+        # todo: error handling
+    }
+
+    if neg {
+        result = result * (-1)
+    }
+
+    ret result
+}
+
+str2dec:/dec text str {
+    :textlen/num = @strlen text
+    :int/num
+    :frac/num
+    :dot_idx/num = textlen
+    :left_str/str
+    :right_str/str
+    for :i/num = 0, i < textlen, i++ {
+        :char/chr = ?chr ((!num text) + i)
+        if char == '.' {
+            dot_idx = i
+            break
+        }
+        if ((!num char) < 48) || ((!num char) > 57) {
+            # todo: error handling
+        }
+        left_str = left_str + @chr2str char
+    }
+    for :i/num = dot_idx + 1, i < textlen, i++ {
+        :char/chr = ?chr ((!num text) + i)
+        if ((!num char) < 48) || ((!num char) > 57) {
+            # todo: error handling
+        }
+        right_str = right_str + @chr2str char
+    }
+
+    int = @str2num left_str
+    frac = @str2num right_str
+
+    :intdec/dec = !dec int
+    :fracdec/dec = !dec frac
+    for :i/num = 0, i < textlen - dot_idx - 1, i++ {
+        fracdec = fracdec / 10.0
+    }
+
+    ret intdec + fracdec
+}
+
+str2bol:/bol text str {
+    text = @lcase text
+
+    if @strcmp text, "false" {
+        ret false
+    } 
+    else if @strcmp text, "true" {
+        ret true
+    }
+    else {
+        # todo error handling
+    }
+}
+
+str2chr:/chr text str {
+    ret ?chr !num text
+}
+
+exit:/bol errno num {
+    @syscall 1, errno, 0, 0, 0, 0, 0
+}
+
+mmap:/num size num {
+    ret @syscall 192, 0, size, 3, 34, (-1), 0
+}
+
+str2chr_arr:/chr[] text str {
+    :len/num = @strlen text
+    :chr_arr/chr[] = !chr[] @mmap $chr * len
+    for :i/num = 0, i < len, i++ {
+        chr_arr[i] = ?chr ((!num text) + $chr * i)
+    }
+    ret chr_arr
+}
+
+chr_arr2str:/str chr_arr chr[], arr_len num {
+    :string/str
+    for :i/num = 0, i < arr_len, i++ {
+        string = string + @chr2str chr_arr[i]
+    }
+    ret string
+}
+
+mremap:/num old_addr num, old_size num, new_size num, flags num, new_addr num {
+    ret @syscall 163, old_addr, old_size, new_size, flags, new_addr, 0
+}
+
+munmap:/num addr num, size num {
+    ret @syscall 91, addr, size, 0, 0, 0, 0
+}
+
+sleep:/bol ms num {
+    :dms/dec = !dec ms
+    :sec/dec = 1000.0
+    :div/dec = dms / sec
+    :secs/num = !num div
+    :drem/dec = div - !dec secs
+    :fms/num = !num (drem * 100.0)
+    :struct_ptr/num = @mmap 8
+    ::struct_ptr /num = secs
+    ::(struct_ptr + 4) /num = fms * 10000000
+    @syscall 162, struct_ptr, 0, 0, 0, 0, 0
+    @munmap struct_ptr, 8
+}
+
+ioctl:/num fd num, cmd num, arg num {
+    ret @syscall 54, fd, cmd, arg, 0, 0, 0
+}
+
+:STDIN_FILENO   /num = 0
+:TCGETS         /num = 21505
+:TCSETS         /num = 21506
+:ECHO           /num = 8
+:ICANON         /num = 2
+:LFLAG_OFFSET   /num = 12
+
+term_setraw:/bol {
+    :attr_addr/num = @mmap 40
+    @ioctl STDIN_FILENO, TCGETS, attr_addr
+
+    :flags_offset/num = attr_addr + LFLAG_OFFSET
+    :flags/num = ?num flags_offset
+
+    if (flags & ECHO) > 0   { flags = flags ^ ECHO }
+    if (flags & ICANON) > 0 { flags = flags ^ ICANON }
+
+    ::flags_offset/num = flags
+    @ioctl STDIN_FILENO, TCSETS, attr_addr
+}
+
+term_setnormal:/bol {
+    :attr_addr/num = @mmap 40
+    @ioctl STDIN_FILENO, TCGETS, attr_addr
+
+    :flags_offset/num = attr_addr + LFLAG_OFFSET
+    :flags/num = ?num flags_offset
+
+    if (flags & ECHO)   == 0 { flags = flags | ECHO }
+    if (flags & ICANON) == 0 { flags = flags | ICANON }
+
+    ::flags_offset/num = flags
+    @ioctl STDIN_FILENO, TCSETS, attr_addr
+}
+
+hide_cursor:/bol {
+    @out "\x1b[?25l"
+}
+
+show_cursor:/bol {
+    @out "\x1b[?25h"
+}
+
+rkey:/chr raw bol {
+    (@term_setraw)
+    :input/chr[1]
+    @syscall 3, STDIN_FILENO, ?num &input, 1, 0, 0, 0
+    if raw {
+        (@term_setnormal)
+    }
+    ret input[0]
+}
+
+rline:/str {
+    :input/str
+    :new_char/str
+    while true {
+        :key/chr = @rkey false
+        :key_str/str = @chr2str key
+
+        # new line was pressed, line is read.
+        if key == '\n' {
+            @out key_str
+            break
+        }
+        # user deleted
+        else if (!num key) == 127 || (!num key) == 23 {
+            # remove last entry
+            input = @strcut input, (@strlen input) - 1
+            # move cursor to the left
+            @out "\x1b[1D \x1b[1D"
+        }
+        # tab is always 4 spaces
+        else if key == '\t' {
+            input = input + "    "
+            @out "    "
+        }
+        # if it's an empty char, then stop reading
+        else if (!num key) == 0 {
+            ret input
+        }
+        else {
+            input = input + key_str
+            @out key_str
+        }
+    }
+    ret input
+}
+
+rline_raw:/str {
+    :input/str
+    :new_char/str
+    while true {
+        :key/chr = @rkey true
+        :key_str/str = @chr2str key
+
+        # new line was pressed, line is read.
+        if key == '\n' {
+            @out key_str
+            break
+        }
+        # user deleted
+        else if (!num key) == 127 || (!num key) == 23 {
+            # remove last entry
+            input = @strcut input, (@strlen input) - 1
+            # move cursor to the left
+            @out "\x1b[1D \x1b[1D"
+        }
+        # tab is always 4 spaces
+        else if key == '\t' {
+            input = input + "    "
+            @out "    "
+        }
+        # if it's an empty char, then stop reading
+        else if (!num key) == 0 {
+            ret input
+        }
+        else {
+            input = input + key_str
+            @out key_str
+        }
+    }
+    ret input
+}
+
+fcntl:/num fd num, cmd num, arg num {
+    ret @syscall 55, fd, cmd, arg, 0, 0, 0
+}
+
+# generate random number between MIN and MAX
+random:/num min num, max num {
+    :random_number/num
+    @syscall 355, &random_number, 4, 0, 0, 0, 0
+    if random_number < 0 {
+        random_number = random_number * (-1)
+    }
+    random_number = (random_number % (max - min + 1)) + min
+    ret random_number
+}
+
+# uses fcntl syscall to apply O_NONBLOCK to stdin
+non_blocking_io:/num {
+    :flags/num = @fcntl 0, 3, 0
+    @fcntl 0, 4, flags | 2048
+    ret flags
+}
+
+# takes flags number and uses fcntl to apply them
+revert_io:/bol flags num {
+    @fcntl 0, 4, flags
+}

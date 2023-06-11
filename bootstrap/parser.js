@@ -1,7 +1,7 @@
 module.exports = tokens => {
     // the z-index of operators basically
     const PRECEDENCE = {
-        '=': 1, '||': 2, '&&': 3,
+        '=': 1, '&': 1, '^': 1, '|': 1, '||': 2, '&&': 3,
         '<': 7, '>': 7, '<=': 7, '>=': 7, '==': 7, '!=': 7,
         '+': 10, '-': 10,
         '*': 20, '/': 20, '%': 20,
@@ -14,14 +14,15 @@ module.exports = tokens => {
     // token validating functions
     const is_bool_expr = expr => expr.type == 'bol' || (expr.type == 'binary' && is_bool_op(expr.operator))
     const is_bool_op   = op => ' && || == > < <= >= != '.indexOf(' ' + op + ' ') >= 0 
-    const is_val       = cc => ' num str var '.indexOf(' ' + cc.type + ' ') >= 0
+    const is_val       = cc => ' num str var chr dec '.indexOf(' ' + cc.type + ' ') >= 0
     const is_var       = () => { let tok = tokens.peek(); return tok && tok.type == 'var' }
     const is_str       = () => { let tok = tokens.peek(); return tok && tok.type == 'str' }
+    const is_dec       = () => { let tok = tokens.peek(); return tok && tok.type == 'dec' }
     const is_num       = () => { let tok = tokens.peek(); return tok && tok.type == 'num' }
     const is_punc      = ch => { let tok = tokens.peek(); return tok && tok.type == 'punc' && (!ch || tok.value == ch) }
     const is_kw        = kw => { let tok = tokens.peek(); return tok && tok.type == 'kw' && (!kw || tok.value == kw) }
     const is_op        = op => { let tok = tokens.peek(); return tok && tok.type == 'op' && (!op || tok.value == op) }
-    const is_type      = () => is_kw('num') || is_kw('str') || is_kw('bol')
+    const is_type      = () => is_kw('num') || is_kw('str') || is_kw('bol') || is_kw('chr') || is_kw('dec')
 
     // token skipping functions
     const skip_var    = () => is_var() ? tokens.next() : tokens.croak('Expecting variable name:')
@@ -29,6 +30,8 @@ module.exports = tokens => {
     const skip_kw     = kw => is_kw(kw) ? tokens.next() : tokens.croak('Expecting keyword: \'' + kw + '\'')
     const skip_op     = op => is_op(op) ? tokens.next() : tokens.croak('Expecting operator: \'' + op + '\'')
     const skip_type   = () => is_type() ? tokens.next() : tokens.croak('Expecting type name:')
+    const skip_str    = () => is_str() ? tokens.next() : tokens.croak('Expecting string:')
+    const skip_num    = () => is_num() ? tokens.next() : tokens.croak('Expecting number:')
 
     // helper functions 
     const unexpected = () => tokens.croak('Unexpected token: ' + JSON.stringify(tokens.peek()))
@@ -67,9 +70,9 @@ module.exports = tokens => {
             if(is_val(current)) return { location, ...current }
             if(current.value == 'true' || current.value == 'false') {
                 return { 
-                    type: 'bol', 
-                    value: current.value == 'true', 
-                    location: location 
+                    type        : 'bol', 
+                    value       : current.value == 'true', 
+                    location    : location 
                 }
             }
         })
@@ -86,10 +89,10 @@ module.exports = tokens => {
             if(!is_punc(')')) return; skip_punc(')')
 
             return {
-                type: 'signed',
-                op: op,
-                value: expr,
-                location: location
+                type        : 'signed',
+                op          : op,
+                value       : expr,
+                location    : location
             }
         })
     }
@@ -98,18 +101,62 @@ module.exports = tokens => {
         return parse_handler(reject => {
             const location = tokens.save()
             if(!is_var())       return; const name = skip_var()
-            if(!is_op('='))     return
-
-            skip_op('=')
+            if(!is_op('='))     return; skip_op('=')
 
             return {
-                type: 'var',
-                mode: 'assign',
-                name: name.value,
-                value: parse_atom(),
-                location: location
+                type        : 'var',
+                mode        : 'assign',
+                name        : name.value,
+                value       : parse_atom(),
+                location    : location
             }
         })
+    }
+
+    const parse_memory_assign = () => {
+        return parse_handler(reject => {
+            const location    = tokens.save()
+            if(!is_punc(':'))   return; skip_punc(':')
+            if(!is_punc(':'))   return; skip_punc(':')
+            const address     = parse_atom()
+            if(!is_op('/'))     return; skip_op('/')
+            if(!is_type())      return; let as_type = skip_type()
+
+            if(is_punc('[')) {
+                as_type.value += '[]'
+                skip_punc('[')
+                skip_punc(']')
+            }
+
+            if(!is_op('='))     return; skip_op('=')
+
+            return {
+                type        : 'massign',
+                address     : address,
+                as_type     : as_type,
+                value       : parse_atom() || 
+                              parse_inline_array(as_type) ||
+                              unexpected(),
+                location    : location
+            }
+        })
+    }
+
+    function parse_inline_array(value_type) {
+        if(!is_punc('[')) return
+        const location = tokens.save()
+        skip_punc('[')
+        const values = parse_delimited(
+            () => true, 
+            () => ({ location: tokens.save(), value: parse_atom() }), 
+            ',')
+        skip_punc(']')
+        return {
+            type: 'inline_array',
+            values: values,
+            value_type: value_type,
+            location
+        }
     }
 
     const parse_declare = () => {
@@ -117,26 +164,61 @@ module.exports = tokens => {
             if(!is_punc(':'))   return; skip_punc(':')
             if(!is_var())       return; const name = skip_var()
             if(!is_op('/'))     return; skip_op('/')
-            if(!is_type())      return; const value_type = skip_type()
+            if(!is_type())      return; let value_type = skip_type()
+
             const location = tokens.save()
+            let is_array, array_size
+
+            if(is_punc('[')) {
+                is_array = true
+                value_type.value += '[]'
+                skip_punc('[')
+                is_num() && (array_size = skip_num())
+                skip_punc(']')
+            }
+
+            if(is_array && array_size && is_op('=')) {
+                unexpected()
+            }
+
+            if(is_array && !array_size && !is_op('=')) {
+                unexpected()
+            }
+
+            // if an empty array with predefined size is
+            // typed, we'll just mock an inline array (zero'ed out)
+            function mock_inline_array() {
+                if(!is_array || !array_size) {
+                    return
+                }
+                return {
+                    type: 'inline_array',
+                    values: undefined,
+                    array_size: array_size,
+                    value_type: value_type,
+                    location
+                }
+            }
 
             if(!is_op('=')) return {
-                type: 'var',
-                mode: 'declare',
-                name: name.value,
-                value: undefined,
-                value_type: value_type
+                type        : 'var',
+                mode        : 'declare',
+                name        : name.value,
+                value       : mock_inline_array() || undefined,
+                value_type  : value_type,
             }
 
             skip_op('=')
 
             return {
-                type: 'var',
-                mode: 'declare',
-                name: name.value,
-                value: parse_atom(),
-                value_type: value_type,
-                location: location
+                type        : 'var',
+                mode        : 'declare',
+                name        : name.value,
+                value       : parse_atom() || 
+                              parse_inline_array(value_type) ||
+                              unexpected(),
+                value_type  : value_type,
+                location    : location,
             }
         })
     }
@@ -163,9 +245,11 @@ module.exports = tokens => {
                 left =  parse_call() || 
                         parse_prefix() || 
                         parse_postfix() || 
+                        parse_indexed() ||
                         parse_datatypes() ||
                         parse_pointer() ||
                         parse_cast() ||
+                        parse_sizeof() ||
                         parse_signed()
                 if(!left)       return 
                 if(!is_op())    return
@@ -173,6 +257,20 @@ module.exports = tokens => {
 
             if(!is_op()) return left
             if(tokens.peek().value == '=') return parse_assign()
+
+            // specific to the memory assign syntax
+            const is_slash_type = () => {
+                return parse_handler(reject => {
+                    if(!is_op('/'))     return; skip_op('/')
+                    if(!is_type())      return;
+                    reject()
+                    return true
+                })
+            }
+
+            if(is_slash_type()) {
+                return left
+            }
 
             const op = tokens.peek().value
 
@@ -187,9 +285,11 @@ module.exports = tokens => {
                     parse_call() || 
                     parse_prefix() || 
                     parse_postfix() || 
+                    parse_indexed() ||
                     parse_datatypes() || 
                     parse_pointer() ||
                     parse_cast() ||
+                    parse_sizeof() ||
                     parse_signed(), PRECEDENCE[op]),
                 location : location
             }, prev_prec)
@@ -202,13 +302,28 @@ module.exports = tokens => {
             if(!is_var())       return; const name = skip_var().value
             if(!is_punc(':'))   return; skip_punc(':')
             if(!is_op('/'))     return; skip_op('/')
-            if(!is_type())      return; const ret_type = skip_type()
+            if(!is_type())      return; let ret_type = skip_type()
+
+            // return type is an array
+            if(is_punc('[')) {
+                skip_punc('[')
+                skip_punc(']')
+                ret_type.value += '[]'
+            }
+
             const location = tokens.save()
 
             const vars = parse_delimited(is_var, () => {
-                const arg_var = tokens.next()
-                const arg_type = skip_type()
-                const location = tokens.save()
+                let location = tokens.save()
+                let arg_var = tokens.next()
+                let arg_type = skip_type()
+                
+                // argument type is an array
+                if(is_punc('[')) {
+                    skip_punc('[')
+                    skip_punc(']')
+                    arg_type.value += '[]'
+                }
                 return { ...arg_var, location, arg_type: arg_type }
             }, ',')
 
@@ -218,12 +333,12 @@ module.exports = tokens => {
             if(!ALREADY_INSIDE_FUNCTION) INSIDE_FUNCTION = false
 
             return {
-                type: 'func',
-                vars: vars,
-                name: name,
-                body: body,
-                location: location,
-                ret_type: ret_type
+                type        : 'func',
+                vars        : vars,
+                name        : name,
+                body        : body,
+                location    : location,
+                ret_type    : ret_type
             }
         })
     }
@@ -242,10 +357,10 @@ module.exports = tokens => {
             }, parse_atom, ',')
 
             return {
-                type: 'call',
-                name: name,
-                args: args,
-                location: location
+                type        : 'call',
+                name        : name,
+                args        : args,
+                location    : location
             }
         }) 
     }
@@ -257,9 +372,9 @@ module.exports = tokens => {
             if(!is_kw('ret')) return; skip_kw('ret')
             const location = tokens.save()
             return {
-                type: 'ret',
-                value: parse_atom(),
-                location: location
+                type        : 'ret',
+                value       : parse_atom(),
+                location    : location
             }
         })
     }
@@ -296,9 +411,9 @@ module.exports = tokens => {
             if(is_punc('{')) {
                 const body = parse_body()
                 return {
-                    type: 'else',
-                    body: body,
-                    location: location
+                    type        : 'else',
+                    body        : body,
+                    location    : location
                 }
             }
 
@@ -376,6 +491,17 @@ module.exports = tokens => {
         })
     }
 
+    const parse_include = () => {
+        if(!is_kw('include')) return; skip_kw('include')
+        const location = tokens.save()
+        const fd = skip_str()
+        return {
+            type        : 'include',
+            fd          : fd,
+            location    : location
+        }
+    }
+
     const parse_break = () => {
         if(!is_kw('break')) return
         const location = tokens.save()
@@ -401,10 +527,10 @@ module.exports = tokens => {
             const name = skip_var().value
 
             return {
-                type: 'prefix',
-                name: name,
-                op: op,
-                location: location
+                type        : 'prefix',
+                name        : name,
+                op          : op,
+                location    : location
             }
         })
     }
@@ -420,10 +546,10 @@ module.exports = tokens => {
             else if(is_op('--'))    op = skip_op('--')
 
             return {
-                type: 'postfix',
-                name: name,
-                op: op,
-                location: location
+                type        : 'postfix',
+                name        : name,
+                op          : op,
+                location    : location
             }
         })
     }
@@ -435,9 +561,72 @@ module.exports = tokens => {
             const name = skip_var().value
 
             return {
-                type: 'pointer',
-                name: name,
-                location: location
+                type        : 'pointer',
+                name        : name,
+                location    : location
+            }
+        })
+    }
+
+    const parse_indexed = () => {
+        return parse_handler(reject => {
+            const location = tokens.save()
+
+            if(!is_var())       return; const array_name = skip_var()
+            if(!is_punc('['))   return;
+
+            skip_punc('[')
+            const index = parse_atom()
+            skip_punc(']')
+
+            return {
+                type        : 'indexed',
+                location    : location,
+                array_name  : array_name,
+                index       : index,
+            }
+        })
+    }
+
+    const parse_array_assign = () => {
+        return parse_handler(reject => {
+            if(!is_var())       return;     const array_name = skip_var()
+            if(!is_punc('['))   return;     skip_punc('[')
+            const location = tokens.save()
+
+            const index = parse_atom()
+            skip_punc(']')
+            if(!is_op('=')) unexpected();   skip_op('=')
+            const value = parse_atom()
+
+            return {
+                type        : 'array_assign',
+                array_name  : array_name,
+                index       : index,
+                value       : value,
+                location    : location
+            }
+        })
+    }
+
+    const parse_sizeof = () => {
+        return parse_handler(reject => {
+            const location = tokens.save()
+            if(!is_punc('$')) return; skip_punc('$')
+            if(!is_var() && !is_type()) return;
+            
+            if(is_type()) {
+                return {
+                    type        : 'sizeof',
+                    value       : skip_type(),
+                    location    : location
+                }
+            }
+            
+            return {
+                type        : 'sizeof',
+                value       : parse_atom(),
+                location    : location
             }
         })
     }
@@ -445,23 +634,37 @@ module.exports = tokens => {
     const parse_cast = () => {
         return parse_handler(reject => {
             const location = tokens.save()
-            if(!is_op('?')) return;   skip_op('?')
+            
+            let immediate = false
+            if(is_op('?')) skip_op('?') 
+            else if(is_op('!')) (immediate = true) && skip_op('!')
+            else return
+
             if(!is_type())  return;   
-            const type = skip_type()
+            let type = skip_type()
+
+            if(is_punc('[')) {
+                skip_punc('[')
+                skip_punc(']')
+                type.value += '[]'
+            }
 
             const value = 
                 parse_binary() || 
                 parse_signed() ||
+                parse_indexed() ||
                 parse_datatypes() || 
                 parse_call() ||
                 parse_cast() ||
+                parse_inline_array() ||
                 parse_pointer()
 
             return {
-                type: 'cast',
-                value: value,
-                cast_type: type,
-                location: location
+                type        : 'cast',
+                value       : value,
+                cast_type   : type,
+                location    : location,
+                immediate   : immediate
             }
         })
     }
@@ -474,9 +677,11 @@ module.exports = tokens => {
                 parse_prefix() ||
                 parse_postfix() ||
                 parse_call() ||
+                parse_indexed() ||
                 parse_datatypes() || 
                 parse_pointer() ||
                 parse_cast() ||
+                parse_sizeof() ||
                 undefined
             )
         } catch { unexpected() }
@@ -485,6 +690,7 @@ module.exports = tokens => {
     const parse_any = () => {
         try {
             return (
+                parse_include() ||
                 parse_break() ||
                 parse_continue() ||
                 parse_if() ||
@@ -496,11 +702,13 @@ module.exports = tokens => {
                 parse_while() ||
                 parse_for() ||
                 parse_function() || 
+                parse_memory_assign() ||
                 parse_assign() ||
                 parse_declare() ||
                 parse_pointer() ||
                 parse_cast() ||
-                parse_datatypes(null, false) ||  
+                parse_datatypes(null, false) ||
+                parse_array_assign() ||
                 unexpected()
             )
         } catch { return unexpected() }

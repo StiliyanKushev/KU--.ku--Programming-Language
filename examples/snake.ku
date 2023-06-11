@@ -1,0 +1,222 @@
+include "../libstd/std.ku"
+
+(@non_blocking_io)
+
+# global definitions
+:GAME_ROWS/num = 10
+:GAME_COLS/num = 20
+:GAME_SPEED_MS/num = 100
+
+# cell types
+:CELL_TYPE_EMPTY/chr = '.'
+:CELL_TYPE_FOOD/chr = '*'
+:CELL_TYPE_BODY/chr = '#'
+
+# buttons
+:BUTTON_LEFT/num    = 4479771
+:BUTTON_RIGHT/num   = 4414235
+:BUTTON_UP/num      = 4283163
+:BUTTON_DOWN/num    = 4348699
+
+# food related
+:FOOD_ROW/num = 0
+:FOOD_COL/num = 0
+
+spawn_food:/bol {
+    FOOD_ROW = @random 0, GAME_ROWS - 1
+    FOOD_COL = @random 0, GAME_COLS - 1
+}
+(@spawn_food)
+
+# note: represent snake as a flat map for row, col pairs
+:SNAKE_BODY_SIZE/num = 8 * 2
+:SNAKE_BODY_ARR/num = @mmap SNAKE_BODY_SIZE
+::SNAKE_BODY_ARR+0/num = (@random 1, GAME_ROWS - 2)
+::SNAKE_BODY_ARR+4/num = (@random 1, GAME_COLS - 2)
+::SNAKE_BODY_ARR+8/num = ?num SNAKE_BODY_ARR
+::SNAKE_BODY_ARR+12/num = (?num SNAKE_BODY_ARR + 4) + 1
+
+# define directions of movement
+:DIRECTION_DOWN/num   = 0
+:DIRECTION_UP/num     = 1
+:DIRECTION_LEFT/num   = 2
+:DIRECTION_RIGHT/num  = 3
+:SNAKE_DIRECTION/num  = DIRECTION_DOWN
+
+# all snake related body functions go here
+is_snake_at:/bol row num, col num {
+    for :i/num = 0, i < SNAKE_BODY_SIZE - 4, i = i + 8 {
+        :snake_row/num = ?num SNAKE_BODY_ARR + i
+        :snake_col/num = ?num SNAKE_BODY_ARR + i + 4
+        if row == snake_row && col == snake_col {
+            ret true
+        }
+    }
+    ret false
+}
+
+is_snake_dead:/bol {
+    :head_row/num = ?num SNAKE_BODY_ARR + 0
+    :head_col/num = ?num SNAKE_BODY_ARR + 4
+
+    # check for out of bounds
+    if head_row < 0 || head_row >= GAME_ROWS {
+        ret true
+    }
+    if head_col < 0 || head_col >= GAME_COLS {
+        ret true
+    }
+
+    for :i/num = SNAKE_BODY_SIZE, i > 8, i = i - 8 {
+        :snake_row/num = ?num SNAKE_BODY_ARR + i - 4 - 4
+        :snake_col/num = ?num SNAKE_BODY_ARR + i - 4
+        if snake_row == head_row && snake_col == head_col {
+            ret true
+        }
+    }
+    ret false
+}
+
+snake_eat_food:/bol {
+    :snake_row/num = ?num SNAKE_BODY_ARR + 0
+    :snake_col/num = ?num SNAKE_BODY_ARR + 4
+    if snake_row != FOOD_ROW || snake_col != FOOD_COL {
+        ret
+    }
+
+    # regenerate food
+    (@spawn_food)
+
+    # calculate which direction
+    # the new body part should be
+    # placed at
+    :last_row/num = ?num SNAKE_BODY_ARR + SNAKE_BODY_SIZE - 8
+    :last_col/num = ?num SNAKE_BODY_ARR + SNAKE_BODY_SIZE - 4
+    :second_to_last_row/num = ?num SNAKE_BODY_ARR + SNAKE_BODY_SIZE - 16 - 4
+    :second_to_last_col/num = ?num SNAKE_BODY_ARR + SNAKE_BODY_SIZE - 16 - 0
+    :new_body_part_row/num = last_row
+    :new_body_part_col/num = last_col
+
+    if last_row > second_to_last_row {
+        new_body_part_row = new_body_part_row + 1
+    }
+    else if last_row < second_to_last_row {
+        new_body_part_row = new_body_part_row - 1
+    }
+    else if last_col > second_to_last_col {
+        new_body_part_col = new_body_part_col + 1
+    }
+    else if last_col < second_to_last_col {
+        new_body_part_col = new_body_part_col - 1
+    }
+
+    # increase the body size
+    # and then remap memory of the body
+    SNAKE_BODY_ARR = @mremap
+        # old_addr # SNAKE_BODY_ARR,
+        # old_size # SNAKE_BODY_SIZE, 
+        # new_size # SNAKE_BODY_SIZE + 8, 
+        # flags    # 0,
+        # new_addr # 0
+    SNAKE_BODY_SIZE = SNAKE_BODY_SIZE + 8
+
+    # append new body part to body
+    ::SNAKE_BODY_ARR + SNAKE_BODY_SIZE - 8 /num = new_body_part_row
+    ::SNAKE_BODY_ARR + SNAKE_BODY_SIZE - 4 /num = new_body_part_col
+}
+
+update_snake:/bol {
+    for :i/num = SNAKE_BODY_SIZE, i > 8, i = i - 8 {
+        :snake_row_addr/num  = SNAKE_BODY_ARR + i - 4 - 4
+        :snake_col_addr/num  = SNAKE_BODY_ARR + i - 4
+        :next_snake_row/num  = ?num SNAKE_BODY_ARR + i - 8 - 4 - 4
+        :next_snake_col/num  = ?num SNAKE_BODY_ARR + i - 8 - 4
+        ::snake_row_addr/num = next_snake_row
+        ::snake_col_addr/num = next_snake_col
+    }
+
+    if SNAKE_DIRECTION == DIRECTION_LEFT {
+        ::SNAKE_BODY_ARR+4/num = (?num SNAKE_BODY_ARR + 4) - 1
+    } else if SNAKE_DIRECTION == DIRECTION_RIGHT {
+        ::SNAKE_BODY_ARR+4/num = (?num SNAKE_BODY_ARR + 4) + 1
+    } else if SNAKE_DIRECTION == DIRECTION_UP {
+        ::SNAKE_BODY_ARR/num = (?num SNAKE_BODY_ARR) - 1
+    } else if SNAKE_DIRECTION == DIRECTION_DOWN {
+        ::SNAKE_BODY_ARR/num = (?num SNAKE_BODY_ARR) + 1
+    }
+}
+
+# drawing definitions
+draw_grid:/bol {
+    (@hide_cursor)
+    :grid/str
+    for :i/num = 0, i < GAME_ROWS, i++ {
+        for :j/num = 0, j < GAME_COLS, j++ {
+            if FOOD_ROW == i && FOOD_COL == j {
+                grid = grid + @chr2str CELL_TYPE_FOOD
+            }
+            else if @is_snake_at i, j {
+                grid = grid + @chr2str CELL_TYPE_BODY
+            }
+            else {
+                grid = grid + @chr2str CELL_TYPE_EMPTY
+            }
+        }
+        grid = grid + "\n"
+    }
+    @out grid
+    (@show_cursor)
+}
+
+handle_inputs:/bol {
+    :key_pressed/num = ?num (@rline)
+    if key_pressed == 0 {
+        # no key was pressed
+        ret
+    }
+
+    if  key_pressed == BUTTON_LEFT && 
+        SNAKE_DIRECTION != DIRECTION_RIGHT {
+        SNAKE_DIRECTION = DIRECTION_LEFT
+    }
+    else if 
+        key_pressed == BUTTON_RIGHT && 
+        SNAKE_DIRECTION != DIRECTION_LEFT {
+        SNAKE_DIRECTION = DIRECTION_RIGHT
+    }
+    else if 
+        key_pressed == BUTTON_UP && 
+        SNAKE_DIRECTION != DIRECTION_DOWN {
+        SNAKE_DIRECTION = DIRECTION_UP
+    }
+    else if 
+        key_pressed == BUTTON_DOWN && 
+        SNAKE_DIRECTION != DIRECTION_UP {
+        SNAKE_DIRECTION = DIRECTION_DOWN
+    }
+}
+
+# main game loop
+while true {
+    if @is_snake_dead {
+        (@clear)
+        @outln "Game Over!"
+        @exit 0
+    }
+
+    (@snake_eat_food)
+    (@update_snake)
+    (@handle_inputs)
+    (@clear)
+    (@draw_grid)
+
+    # artificially edit speed
+    # based on walking direction
+    if  SNAKE_DIRECTION == DIRECTION_LEFT || 
+        SNAKE_DIRECTION == DIRECTION_RIGHT {
+        @sleep GAME_SPEED_MS
+    }
+    else {
+        @sleep GAME_SPEED_MS * 2
+    }
+}

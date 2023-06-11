@@ -2,26 +2,6 @@ KU (.ku) Programming Language
 
 ## Todo List
 
--- string --
-------------
-
-@strcmp - takes two strings and compares them. returns true or false.
-"str" == "str" - binary shorthand
-
--- inputs --
-------------
-
-@noecho - disables echo from stdin to stdout
-@onecho - enables echo from stdin to stdout
-@rkey - reads key from stdin, returns string
-@rline - reads line from stdin, returns string
-
--- memory management --
------------------------
-
-@mmap - takes size/num, returns address/num on heap
-@munmap - takes address/num and size/num, and free's memory
-
 -- structs --
 -------------
 
@@ -38,31 +18,22 @@ struct person {
     last_name = "Kushev"
     programmer = true
 }
+    
+-- sizeof --
+------------
 
--- casting --
--------------
+:temp/num = 123
+@outln @num2str $temp    # prints 4
+@outln @num2str $dec     # prints 4
 
-?num addr
-?str addr
-?bol addr
-?custom_struct addr
+-- throw error --
+-----------------
 
--- parsing --
--------------
+# this will also print the line, col, file, etc..
+# and then it will exit with errno 1
+throw "My error goes here"
 
-@num2str 
-@str2num
-...
+-- document the syntax --
+-------------------------
 
--- decimals --
---------------
-
-:my_var/dec = 1.1
-
--- pointers --
---------------
-
-&my_str
-&my_bol
-&my_strcut
-&my_number
+# note: this will probably enforce some overall changes.
