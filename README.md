@@ -11,14 +11,15 @@ A compiled programming language made from scratch using solely Node.JS. (Linux O
    `git clone https://github.com/StiliyanKushev/KU--.ku--Programming-Language.git`
 
    `cd KU--.ku--Programming-Language`
-<br>
+
  2. Install dependencies.
 
     `install.sh`
-<br>
- 3. Show default help message.
 
-    `kulang.sh`<br>
+ 4. Show default help message.
+
+    `kulang.sh`
+    
     Example output:
     <br>
 
@@ -33,16 +34,17 @@ A compiled programming language made from scratch using solely Node.JS. (Linux O
       -m, --asm                     Print ASM
     ```
 
-<br>
-
 4. (Optional) Run the unit tests.
+
    `test.sh -c -s`
-<br>
+
 5. (Optional) Install the vs-code extension.
+
    `cp -r ./kulang-vscode-extension ~/.vscode/extensions`
-<br>
+
 6. Run hello world.
-​	`./kulang.sh ./examples/helloworld.ku -c -o ./program && ./program`
+
+    `./kulang.sh ./examples/helloworld.ku -c -o ./program && ./program`
 
 ## Features
 
@@ -61,7 +63,7 @@ A compiled programming language made from scratch using solely Node.JS. (Linux O
 
 ##### Example AST print:
 
-```json
+```js
 {
   type: 'prog',
   prog: [
@@ -160,78 +162,17 @@ A compiled programming language made from scratch using solely Node.JS. (Linux O
 
 1. Snake game
 
-   [insert gif here]
+   ![snake game](https://i.imgur.com/44Yhou8.gif)
 
 2. Tetris game
 
-   [insert gif here]
+   ![snake game](https://i.imgur.com/7aXG9B0.gif)
 
 
-
-
-
-
-## Syntax
-
-Provide an overview of the syntax and structure of your programming language. Include information about variables, data types, control flow structures, function declarations, etc. You can use code blocks or tables to illustrate the syntax.
-
-### Variables
-
-Explain how variables are declared and used in your language. Provide examples.
-
-### Control Flow
-
-Describe the control flow structures in your language, such as if statements, loops, and switch statements. Provide examples.
-
-### Functions
-
-Explain how functions are defined and used in your language. Discuss any special features or capabilities of functions. Provide examples.
-
-### Data Types
-
-List and describe the data types available in your language, such as numbers, strings, arrays, etc.
-
-## Examples
-
-Provide some code examples to demonstrate the usage of your programming language. Showcase different features and functionalities.
-
-### Example 1: Hello World
-
-A simple "Hello, World!" program in your programming language:
-
-```
-[Insert code here]
-
-```
-
-shellCopy code
-
-### Example 2: Control Flow
-
-An example showcasing the usage of if statements and loops:
-
-```
-[Insert code here]
-
-```
-
-bashCopy code
-
-### Example 3: Function
-
-An example demonstrating the usage of functions:
-
-```
-[Insert code here]
-
-```
-
-pythonCopy code
 
 ## Conclusion
 
-Summarize the key features and strengths of your programming language. Provide any additional resources or references for further exploration.
-
-```
-
-```
+This should not be used for anything more than some shitty example games.<br>
+It lacks a lot of features that modern programming languages have.<br>
+I simply created it to prove you can take javascript and create a faster<br>
+(compiled) programming language (albeit shittier).<br>
