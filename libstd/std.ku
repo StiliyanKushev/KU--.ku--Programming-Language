@@ -286,6 +286,7 @@ term_setraw:/bol {
 
     ::flags_offset/num = flags
     @ioctl STDIN_FILENO, TCSETS, attr_addr
+    @munmap attr_addr, 40
 }
 
 term_setnormal:/bol {
@@ -300,6 +301,7 @@ term_setnormal:/bol {
 
     ::flags_offset/num = flags
     @ioctl STDIN_FILENO, TCSETS, attr_addr
+    @munmap attr_addr, 40
 }
 
 hide_cursor:/bol {
