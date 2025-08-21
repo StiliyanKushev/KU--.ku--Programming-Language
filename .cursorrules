@@ -114,38 +114,41 @@ Essential functions include:
 ```
 
 ### macOS Compatibility
-Since KU targets Linux x86 32-bit, it cannot run natively on macOS. Options for macOS users:
+Since KU targets Linux x86 32-bit, it cannot run natively on macOS. However, **full support is available via Docker with Rosetta 2 emulation**.
 
-1. **Linux Virtual Machine**: Use VMware Fusion, Parallels Desktop, or VirtualBox
-2. **Docker**: Run a Linux container with required build tools
-3. **QEMU**: Emulate x86 Linux environment
-4. **Cross-compilation**: Modify compiler to target macOS (requires significant changes)
+**Requirements for macOS:**
+1. **Apple Silicon Mac** (M1/M2/M3) - recommended for best performance
+2. **Rosetta 2**: `softwareupdate --install-rosetta --agree-to-license`  
+3. **Docker Desktop** with "Use Rosetta for x86/amd64 emulation" enabled
 
-**Recommended Setup for macOS Testing:**
+**Running KU on macOS:**
 
-**Option 1: Docker (Recommended)**
+**Option 1: Use the provided runner script (Recommended)**
 ```bash
-# Use the provided Docker setup
-./docker-test.sh
+# Run any KU program
+./run-macos.sh examples/helloworld.ku
 
-# Or manually:
-docker build -f Dockerfile.test -t ku-test .
-docker run -it --rm -v $(pwd):/ku-workspace ku-test
-# Inside container: ./install.sh && ./test.sh -c
+# Run tests
+./run-macos.sh --test
+
+# Check setup
+./run-macos.sh --setup
 ```
 
-**Option 2: Linux VM**
+**Option 2: Direct Docker commands**
 ```bash
-# Install VirtualBox, VMware Fusion, or Parallels
-# Create Ubuntu 20.04 VM with 32-bit support
-# Install: nodejs npm nasm build-essential libc6-dev-i386 gcc-multilib
+# Run hello world
+docker run --platform linux/amd64 --rm -v "$(pwd)":/workspace node:16-alpine sh -c "
+  apk add --no-cache nasm build-base > /dev/null
+  cd /workspace
+  ./kulang.sh examples/helloworld.ku -c -o hello && ./hello
+"
 ```
 
-**Option 3: QEMU (Advanced)**
-```bash
-# Install QEMU and set up x86 Linux environment
-qemu-system-i386 -cdrom ubuntu-20.04-desktop-i386.iso -m 2048
-```
+**Why This Works:**
+- Rosetta 2 provides near-native x86_64 emulation on Apple Silicon
+- Docker provides the required Linux environment with proper syscall support
+- The combination allows full KU compilation and execution on macOS
 
 ## Project Guidelines
 
@@ -227,7 +230,8 @@ When working with KU code:
 5. Follow the established syntax patterns from examples
 6. Consider Linux syscall limitations when suggesting system operations
 7. Be aware this is primarily an educational/experimental language
-8. For macOS users, recommend Docker/VM setup for testing
+8. For macOS users, recommend using `./run-macos.sh` script for easy execution
+9. Rosetta 2 + Docker provides full KU language support on Apple Silicon Macs
 
 ## Compiler Architecture Details
 

@@ -1,50 +1,96 @@
 # Ku Lang
 
-A compiled programming language made from scratch using solely Node.JS. (Linux Only)
+A compiled programming language made from scratch using solely Node.JS.
+
+**Platform Support:**
+- **Linux**: Native support (x86 32-bit)
+- **macOS**: Supported via Docker with Rosetta 2 emulation
+- **Windows**: Not supported
 
 
 
 ## Getting started
 
-1. Clone the repository.
+### Linux (Native)
 
-   `git clone https://github.com/StiliyanKushev/KU--.ku--Programming-Language.git`
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/StiliyanKushev/KU--.ku--Programming-Language.git
+   cd KU--.ku--Programming-Language
+   ```
 
-   `cd KU--.ku--Programming-Language`
+2. Install dependencies:
+   ```bash
+   ./install.sh
+   ```
 
- 2. Install dependencies.
+3. Run hello world:
+   ```bash
+   ./kulang.sh examples/helloworld.ku -c -o hello && ./hello
+   ```
 
-    `install.sh`
+### macOS (Docker + Rosetta 2)
 
- 4. Show default help message.
+1. **Prerequisites:**
+   - Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+   - Enable Rosetta 2: `softwareupdate --install-rosetta --agree-to-license`
+   - In Docker Desktop settings, enable "Use Rosetta for x86/amd64 emulation"
 
-    `kulang.sh`
-    
-    Example output:
-    <br>
+2. Clone the repository:
+   ```bash
+   git clone https://github.com/StiliyanKushev/KU--.ku--Programming-Language.git
+   cd KU--.ku--Programming-Language
+   ```
 
-    ```
-    Usage: kulang.sh /path/to/file.ku [options]
-    Options:
-      -h, --help                    Show this help message
-      -v, --version                 Show version
-      -o, --output                  Output file path
-      -c, --compile                 Compile to native
-      -a, --ast                     Print AST
-      -m, --asm                     Print ASM
-    ```
+3. **Easy way - Use the macOS runner script:**
+   ```bash
+   # Run hello world
+   ./run-macos.sh examples/helloworld.ku
+   
+   # Run any KU program
+   ./run-macos.sh path/to/your/program.ku
+   
+   # Run all tests
+   ./run-macos.sh --test
+   
+   # Check requirements
+   ./run-macos.sh --setup
+   ```
 
-4. (Optional) Run the unit tests.
+4. **Manual way - Direct Docker commands:**
+   ```bash
+   # Run hello world
+   docker run --platform linux/amd64 --rm -v "$(pwd)":/workspace node:16-alpine sh -c "
+     apk add --no-cache nasm build-base > /dev/null
+     cd /workspace
+     ./kulang.sh examples/helloworld.ku -c -o hello && ./hello
+   "
+   ```
 
-   `test.sh -c -s`
+### Command Line Options
 
-5. (Optional) Install the vs-code extension.
+```
+Usage: kulang.sh /path/to/file.ku [options]
+Options:
+  -h, --help                    Show this help message
+  -v, --version                 Show version
+  -o, --output                  Output file path
+  -c, --compile                 Compile to native
+  -a, --ast                     Print AST
+  -m, --asm                     Print ASM
+```
 
-   `cp -r ./kulang-vscode-extension ~/.vscode/extensions`
+### Testing
 
-6. Run hello world.
+- **Linux**: `./test.sh -c`
+- **macOS**: `./run-macos.sh --test`
 
-    `./kulang.sh ./examples/helloworld.ku -c -o ./program && ./program`
+### VS Code Extension
+
+Install syntax highlighting:
+```bash
+cp -r ./kulang-vscode-extension ~/.vscode/extensions
+```
 
 ## Features
 
