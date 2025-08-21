@@ -1,0 +1,272 @@
+# KU Programming Language - Cursor AI Rules
+
+## Project Overview
+This is the KU programming language - a compiled systems programming language built from scratch using Node.js. The project includes a complete compiler toolchain, interpreter (deprecated), standard library, and VS Code extension.
+
+## OS/System Support
+- **Primary Target**: Linux only (x86 32-bit)
+- **Build Dependencies**: 
+  - Node.js (for bootstrap compiler)
+  - NASM (Netwide Assembler)
+  - ld (GNU linker)
+  - Standard Linux development tools
+- **Architecture**: Compiles to x86 32-bit assembly (ELF format)
+- **System Calls**: Direct Linux syscall interface through `@syscall` built-in
+
+## Language Capabilities
+
+### Core Features
+- **Static typing** with type annotations (num, str, bol, chr, dec)
+- **Manual memory management** with `mmap`/`munmap` syscalls
+- **Function definitions** with return type annotations
+- **Control flow**: if/else, while loops, for loops, break/continue
+- **Variable scoping** (function-local and global)
+- **Include system** for modular code
+- **Array support** with pointer arithmetic
+- **String manipulation** and concatenation
+- **Type casting** between basic types
+
+### Syntax Highlights
+```ku
+# Variable declaration with type
+:variable_name/type = value
+
+# Function definition
+function_name:/return_type param1 type1, param2 type2 {
+    # function body
+    ret return_value
+}
+
+# Function calls
+@function_name arg1, arg2
+
+# Control structures
+if condition {
+    # code
+} else if condition {
+    # code  
+} else {
+    # code
+}
+
+for :i/num = 0, i < 10, i++ {
+    # loop body
+}
+
+while condition {
+    # loop body
+}
+```
+
+### Data Types
+- `num`: 32-bit integers
+- `str`: String literals (memory addresses)
+- `bol`: Boolean values (true/false)
+- `chr`: Single characters
+- `dec`: Decimal/floating point numbers
+- Arrays: `type[]` (e.g., `num[]`, `str[]`)
+
+### Built-in Operations
+- **Arithmetic**: `+`, `-`, `*`, `/`, `%`
+- **Comparison**: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- **Logical**: `&&`, `||`, `!`
+- **Bitwise**: `&`, `|`, `^`
+- **Assignment**: `=`
+- **Increment/Decrement**: `++`, `--` (prefix and postfix)
+- **Type casting**: `!type value`, `?type value`, `/type`
+- **Memory access**: `+pointer` (dereference), `&variable` (address)
+
+### Standard Library (`libstd/std.ku`)
+Essential functions include:
+- **I/O**: `out`, `outln`, `rkey`, `rline`
+- **String operations**: `strlen`, `strcmp`, `strcut`, `chr2str`
+- **Type conversions**: `num2str`, `str2num`, `bol2str`, etc.
+- **Memory management**: `mmap`, `munmap`, `mremap`
+- **System operations**: `syscall`, `sleep`, `exit`
+- **Terminal control**: `clear`, `hide_cursor`, `show_cursor`
+- **Random numbers**: `random`
+
+## Testing Strategy
+
+### Test Structure
+- Located in `testing/tests/` directory
+- Each test has a subdirectory with:
+  - `source.ku`: Test source code
+  - `expect.log`: Expected output
+- Test runner: `testing/tests/index.js`
+
+### Test Categories
+1. **assign**: Variable assignment and scoping
+2. **call**: Function calls and nested functions
+3. **conditions**: if/else conditional statements  
+4. **define**: Variable and function definitions
+5. **function**: Function definition and return values
+6. **loop**: For/while loops with break/continue
+7. **prefix_postfix**: Increment/decrement operators
+
+### Running Tests
+```bash
+# Run compiler tests (Linux only)
+./test.sh -c
+
+# NOTE: Simulator/interpreter is DEPRECATED and NON-FUNCTIONAL
+# Do not use: ./test.sh -s
+```
+
+### macOS Compatibility
+Since KU targets Linux x86 32-bit, it cannot run natively on macOS. Options for macOS users:
+
+1. **Linux Virtual Machine**: Use VMware Fusion, Parallels Desktop, or VirtualBox
+2. **Docker**: Run a Linux container with required build tools
+3. **QEMU**: Emulate x86 Linux environment
+4. **Cross-compilation**: Modify compiler to target macOS (requires significant changes)
+
+**Recommended Setup for macOS Testing:**
+
+**Option 1: Docker (Recommended)**
+```bash
+# Use the provided Docker setup
+./docker-test.sh
+
+# Or manually:
+docker build -f Dockerfile.test -t ku-test .
+docker run -it --rm -v $(pwd):/ku-workspace ku-test
+# Inside container: ./install.sh && ./test.sh -c
+```
+
+**Option 2: Linux VM**
+```bash
+# Install VirtualBox, VMware Fusion, or Parallels
+# Create Ubuntu 20.04 VM with 32-bit support
+# Install: nodejs npm nasm build-essential libc6-dev-i386 gcc-multilib
+```
+
+**Option 3: QEMU (Advanced)**
+```bash
+# Install QEMU and set up x86 Linux environment
+qemu-system-i386 -cdrom ubuntu-20.04-desktop-i386.iso -m 2048
+```
+
+## Project Guidelines
+
+### File Structure
+- `bootstrap/`: Core compiler implementation (Node.js)
+  - `index.js`: Main entry point
+  - `reader.js`: Input lexer
+  - `tokenizer.js`: Token generation
+  - `parser.js`: AST generation (727 lines)
+  - `compile.js`: Assembly code generation (2483 lines)
+  - `simulate.js`: Interpreter (deprecated)
+  - `cmd.js`: CLI argument parsing
+- `libstd/`: Standard library implementation
+- `examples/`: Sample programs (helloworld, snake, tetris)
+- `testing/`: Test suite and runner
+- `kulang-vscode-extension/`: VS Code syntax highlighting
+
+### Compilation Process
+1. **Lexical Analysis**: `reader.js` → `tokenizer.js`
+2. **Parsing**: `parser.js` creates AST
+3. **Code Generation**: `compile.js` generates x86 assembly
+4. **Assembly**: NASM assembles to object file
+5. **Linking**: GNU ld creates executable
+
+### Development Workflow
+```bash
+# Install dependencies
+./install.sh
+
+# Compile and run a program
+./kulang.sh path/to/file.ku -c -o output_program
+./output_program
+
+# View AST
+./kulang.sh path/to/file.ku -a
+
+# View generated assembly
+./kulang.sh path/to/file.ku -c -o program -m
+```
+
+### Code Style
+- Use descriptive variable names with type suffixes
+- Functions should have clear return type annotations
+- Include `libstd/std.ku` for standard functionality
+- Use consistent indentation (appears to be 4 spaces)
+- Comments use `#` for single-line, `# ... #` for blocks
+
+### Memory Management
+- Strings are heap-allocated and require manual management
+- Use `mmap` for dynamic allocation
+- Use `munmap` to free allocated memory
+- Be careful with string concatenation (creates new allocations)
+
+### System Integration
+- Direct syscall interface for system operations
+- Terminal manipulation for interactive programs
+- Non-blocking I/O support for real-time applications
+- Raw terminal mode for games/interactive apps
+
+### Limitations & Considerations
+- Linux-only due to syscall dependencies
+- 32-bit x86 architecture limitation
+- No garbage collection (manual memory management)
+- Limited error handling capabilities
+- No standard library beyond basic operations
+- Primarily designed for educational/demonstration purposes
+
+### VS Code Extension
+- Syntax highlighting for `.ku` files
+- Language configuration in `kulang-vscode-extension/`
+- Install: `cp -r ./kulang-vscode-extension ~/.vscode/extensions`
+
+## AI Assistant Guidelines
+When working with KU code:
+1. Always include `libstd/std.ku` for standard functions
+2. Use proper type annotations for all variables and functions
+3. Remember manual memory management requirements
+4. **IMPORTANT**: Only test with compiler mode (`-c`), simulator is broken and deprecated
+5. Follow the established syntax patterns from examples
+6. Consider Linux syscall limitations when suggesting system operations
+7. Be aware this is primarily an educational/experimental language
+8. For macOS users, recommend Docker/VM setup for testing
+
+## Compiler Architecture Details
+
+### Bootstrap Compiler Components
+- **Reader** (`reader.js`): Character-level input processing with position tracking
+- **Tokenizer** (`tokenizer.js`): Converts characters to tokens (keywords, operators, literals)
+- **Parser** (`parser.js`): Builds Abstract Syntax Tree with precedence handling
+- **Compiler** (`compile.js`): Generates x86 assembly with stack management and syscalls
+- **Simulator** (`simulate.js`): JavaScript-based interpreter (DEPRECATED - NON-FUNCTIONAL)
+
+### Token Types
+- `kw`: Keywords (if, else, while, for, ret, break, continue, num, str, bol, chr, dec, include)
+- `var`: Variable names and identifiers
+- `str`: String literals (double quotes)
+- `chr`: Character literals (single quotes)
+- `num`: Integer literals
+- `dec`: Decimal/float literals
+- `punc`: Punctuation (:,(){}[]@$)
+- `op`: Operators (+-*/%=&|<>!?^)
+
+### AST Node Types
+- `prog`: Program root with array of statements
+- `func`: Function definition with parameters and body
+- `var`: Variable declaration/assignment
+- `call`: Function call with arguments
+- `if`: Conditional statement with optional else
+- `for`: For loop with initialization, condition, increment
+- `while`: While loop with condition
+- `binary`: Binary operations (arithmetic, comparison, logical)
+- `assign`: Assignment operations
+- `postfix`/`prefix`: Increment/decrement operations
+- `ret`: Return statement
+- `include`: File inclusion directive
+
+### Assembly Generation
+- **Target**: x86 32-bit ELF format
+- **Calling Convention**: Custom stack-based with EBP frame pointer
+- **Memory Layout**: 
+  - Data section for string literals and global variables
+  - Text section for executable code
+  - Stack for local variables and function calls
+- **System Integration**: Direct Linux syscalls via `int 0x80`

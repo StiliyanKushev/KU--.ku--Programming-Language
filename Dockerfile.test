@@ -1,0 +1,30 @@
+# Docker setup for testing KU Programming Language on macOS/non-Linux systems
+# This provides a Linux x86 32-bit environment with all required tools
+
+FROM ubuntu:20.04
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install required packages for KU compilation
+RUN apt-get update && apt-get install -y \
+    nodejs \
+    npm \
+    nasm \
+    build-essential \
+    libc6-dev-i386 \
+    gcc-multilib \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /ku-workspace
+
+# Copy project files (when running docker build)
+# Note: Users should mount their local directory instead
+# COPY . .
+
+# Install KU dependencies
+# RUN ./install.sh
+
+# Default command shows help
+CMD ["bash", "-c", "echo 'KU Programming Language Test Environment' && echo 'Usage:' && echo '  docker run -it --rm -v \$(pwd):/ku-workspace ku-test' && echo '  ./install.sh && ./test.sh -c' && bash"]
