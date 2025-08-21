@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "permissions": {
+    "allow": [
+      "Shell(ls)",
+      "Shell(cd)",
+      "Shell(pwd)",
+      "Shell(cat)",
+      "Shell(grep)",
+      "Shell(find)",
+      "Shell(chmod)",
+      "Shell(cp)",
+      "Shell(mv)",
+      "Shell(rm)",
+      "Shell(mkdir)",
+      "Shell(rmdir)",
+      "Shell(touch)",
+      "Shell(echo)",
+      "Shell(head)",
+      "Shell(tail)",
+      "Shell(wc)",
+      "Shell(sort)",
+      "Shell(uniq)",
+      "Shell(diff)",
+      "Shell(git)",
+      "Shell(node)",
+      "Shell(npm)",
+      "Shell(yarn)",
+      "Shell(nasm)",
+      "Shell(ld)",
+      "Shell(gcc)",
+      "Shell(make)",
+      "Shell(./kulang.sh)",
+      "Shell(./kulang-macos.sh)",
+      "Shell(./test.sh)",
+      "Shell(./test-macos.sh)",
+      "Shell(./install.sh)",
+      "Shell(./run-macos.sh)"
+    ],
+    "deny": []
+  }
+}
