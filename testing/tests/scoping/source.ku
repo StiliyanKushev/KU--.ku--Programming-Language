@@ -1,0 +1,23 @@
+include "../../../libstd/std.ku"
+
+:global_var/num = 100
+
+outer_func:/bol {
+    :local_var/num = 200
+    @outln @num2str global_var
+    @outln @num2str local_var
+    
+    inner_func:/bol {
+        :inner_var/num = 300
+        :local_var/num = 250  # Shadow outer local_var
+        @outln @num2str global_var
+        @outln @num2str local_var
+        @outln @num2str inner_var
+    }
+    
+    (@inner_func)
+    @outln @num2str local_var  # Should be 200, not 250
+}
+
+(@outer_func)
+@outln @num2str global_var

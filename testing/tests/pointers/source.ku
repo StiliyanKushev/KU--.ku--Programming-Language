@@ -1,0 +1,22 @@
+include "../../../libstd/std.ku"
+
+:value/num = 42
+:ptr/num = &value
+
+# Test address-of and dereference
+@outln @num2str value
+@outln @num2str (+ptr)
+
+# Test pointer arithmetic with arrays
+:arr/num[] = [10, 20, 30]
+:arr_ptr/num = &arr
+
+# Test string pointer operations
+:text/str = "test"
+:char_at_0/chr = ?chr (!num text)
+:char_at_1/chr = ?chr ((!num text) + 1)
+@outln @chr2str char_at_0
+@outln @chr2str char_at_1
+
+# Clean up
+@munmap ?num &arr, (3 * $num)

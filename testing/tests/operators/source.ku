@@ -1,0 +1,36 @@
+include "../../../libstd/std.ku"
+
+:a/num = 15
+:b/num = 4
+
+# Arithmetic operators
+@outln @num2str (a + b)
+@outln @num2str (a - b)
+@outln @num2str (a * b)
+@outln @num2str (a / b)
+@outln @num2str (a % b)
+
+# Comparison operators
+@outln @bol2str (a == b)
+@outln @bol2str (a != b)
+@outln @bol2str (a < b)
+@outln @bol2str (a > b)
+@outln @bol2str (a <= b)
+@outln @bol2str (a >= b)
+
+# Logical operators
+:x/bol = true
+:y/bol = false
+@outln @bol2str (x && y)
+@outln @bol2str (x || y)
+# Logical NOT might not be supported in KU, or has different syntax
+:not_x/bol = x == false
+@outln @bol2str not_x
+
+# Bitwise operators
+:bitwise_and/num = a & b
+:bitwise_or/num = a | b
+:bitwise_xor/num = a ^ b
+@outln @num2str bitwise_and
+@outln @num2str bitwise_or
+@outln @num2str bitwise_xor

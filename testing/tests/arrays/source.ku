@@ -1,0 +1,31 @@
+include "../../../libstd/std.ku"
+
+# Test array declarations with memory allocation
+:numbers/num[] = !num[] @mmap (5 * $num)  # 5 numbers * size of num
+numbers[0] = 10
+numbers[1] = 20
+numbers[2] = 30
+
+# Test array access
+@outln @num2str numbers[0]
+@outln @num2str numbers[1]
+@outln @num2str numbers[2]
+
+# Test array iteration
+for :i/num = 0, i < 3, i++ {
+    @out @num2str numbers[i]
+    @out " "
+}
+@outln ""
+
+# Test array literal
+:test_nums/num[] = [42, 100, 200]
+for :j/num = 0, j < 3, j++ {
+    @out @num2str test_nums[j]
+    @out " "
+}
+@outln ""
+
+# Clean up memory using proper type sizes
+@munmap ?num &numbers, (5 * $num)
+@munmap ?num &test_nums, (3 * $num)

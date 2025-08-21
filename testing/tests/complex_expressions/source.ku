@@ -1,0 +1,41 @@
+include "../../../libstd/std.ku"
+
+:a/num = 10
+:b/num = 5
+:c/num = 2
+
+# Test operator precedence
+:result1/num = a + b * c
+:result2/num = (a + b) * c
+:result3/num = a * b + c
+:result4/num = a * (b + c)
+
+@outln @num2str result1
+@outln @num2str result2
+@outln @num2str result3
+@outln @num2str result4
+
+# Complex nested expressions
+:complex/num = (a + b) * (c + 1) / (b - c)
+@outln @num2str complex
+
+# Mixed type expressions
+:x/dec = 3.5
+:mixed_result/dec = (!dec a) + x * (!dec c)
+@outln @dec2str mixed_result
+
+# Complex boolean expressions
+:sum_ac/num = a + c
+:mult_b2/num = b * 2
+:bool_result/bol = (a > b) && (c < b) && (sum_ac > mult_b2)
+@outln @bol2str bool_result
+
+# Nested function calls with expressions
+:sum_ab/num = a + b
+:mult_c2/num = c * 2
+:str_sum/str = @num2str sum_ab
+:str_mult/str = @num2str mult_c2
+:conv_sum/num = @str2num str_sum
+:conv_mult/num = @str2num str_mult
+:nested_result/num = conv_sum + conv_mult
+@outln @num2str nested_result

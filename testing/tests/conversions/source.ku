@@ -1,0 +1,30 @@
+include "../../../libstd/std.ku"
+
+# Test various string to number conversions
+@outln @num2str @str2num "0"
+@outln @num2str @str2num "123"
+@outln @num2str @str2num "-45"
+@outln @num2str @str2num "+67"
+
+# Test decimal conversions
+@outln @dec2str @str2dec "0.0"
+@outln @dec2str @str2dec "12.34"
+@outln @dec2str @str2dec "0.001"
+
+# Test number to string edge cases
+:zero/num = 0
+:negative/num = 0 - 1
+:large/num = 999999
+@outln @num2str zero
+@outln @num2str negative
+@outln @num2str large
+
+# Test boolean conversions
+@outln @bol2str true
+@outln @bol2str false
+
+# Test character conversions
+:test_char/chr = 'Z'
+@outln @chr2str test_char
+:char_num/num = !num test_char
+@outln @num2str char_num

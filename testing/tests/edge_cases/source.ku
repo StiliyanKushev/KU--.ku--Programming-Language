@@ -1,0 +1,25 @@
+include "../../../libstd/std.ku"
+
+# Test division by small numbers
+:safe_div/num = 10 / 1
+@outln @num2str safe_div
+
+# Test empty string operations
+:empty/str = ""
+@outln @num2str @strlen empty
+@outln @bol2str @strcmp empty, ""
+
+# Test zero values
+:zero_num/num = 0
+:zero_dec/dec = 0.0
+@outln @num2str zero_num
+@outln @dec2str zero_dec
+
+# Test large numbers 
+:large_num/num = 2000000
+@outln @bol2str (large_num > 0)
+
+# Test string edge cases
+:single_char/str = "A"
+@outln @num2str @strlen single_char
+@outln single_char

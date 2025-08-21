@@ -1,0 +1,23 @@
+include "../../../libstd/std.ku"
+
+# Test sizeof operator for different types
+@outln @num2str $num    # Size of num type
+@outln @num2str $chr    # Size of chr type  
+@outln @num2str $str    # Size of str type (pointer)
+@outln @num2str $bol    # Size of bol type
+@outln @num2str $dec    # Size of dec type
+
+# Test using type sizes for memory allocation
+:byte_array/num[] = !num[] @mmap (8 * $chr)  # 8 bytes
+for :i/num = 0, i < 8, i++ {
+    byte_array[i] = 65 + i  # ASCII A-H
+}
+
+# Output the bytes as characters
+for :j/num = 0, j < 8, j++ {
+    @out @chr2str !chr byte_array[j]
+}
+@outln ""
+
+# Clean up using proper type size
+@munmap ?num &byte_array, (8 * $chr)

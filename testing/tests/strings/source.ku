@@ -1,0 +1,28 @@
+include "../../../libstd/std.ku"
+
+:text1/str = "Hello"
+:text2/str = "World"
+:space/str = " "
+
+# String concatenation
+:combined/str = text1 + space + text2
+@outln combined
+
+# String functions from stdlib
+@outln @num2str @strlen combined
+@outln @bol2str @strcmp text1, "Hello"
+@outln @bol2str @strcmp text1, "hello"
+
+# String cutting
+:sub/str = @strcut combined, 5
+@outln sub
+
+# Case conversion
+:upper/str = @ucase text1
+:lower/str = @lcase "WORLD"
+@outln upper
+@outln lower
+
+# Character operations
+:first_char/chr = ?chr (+text1)
+@outln @chr2str first_char

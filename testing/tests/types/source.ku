@@ -1,0 +1,23 @@
+include "../../../libstd/std.ku"
+
+# Test all basic types
+:num_val/num = 42
+:str_val/str = "hello"
+:bol_val/bol = true
+:chr_val/chr = 'A'
+:dec_val/dec = 3.14
+
+# Test type casting
+:cast_num/str = @num2str num_val
+:cast_str/num = @str2num "123"
+:cast_bol/str = @bol2str bol_val
+:cast_dec/str = @dec2str dec_val
+
+@outln cast_num
+@outln @num2str cast_str
+@outln cast_bol
+@outln cast_dec
+
+# Test type operations
+:result/num = (!num chr_val) + num_val
+@outln @num2str result

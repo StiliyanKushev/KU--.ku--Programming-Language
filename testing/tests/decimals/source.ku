@@ -1,0 +1,23 @@
+include "../../../libstd/std.ku"
+
+:pi/dec = 3.14159
+:e/dec = 2.71828
+
+# Decimal arithmetic
+:sum/dec = pi + e
+:diff/dec = pi - e
+:prod/dec = pi * e
+:quot/dec = pi / e
+
+@outln @dec2str sum
+@outln @dec2str diff
+@outln @dec2str prod
+@outln @dec2str quot
+
+# Decimal comparisons
+@outln @bol2str (pi > e)
+@outln @bol2str (pi == 3.14159)
+
+# Mixed operations
+:mixed/dec = pi + (!dec 2)
+@outln @dec2str mixed
