@@ -1,0 +1,147 @@
+include "../libstd/std.ku"
+
+# Function to check if two numbers have opposite signs
+# Returns true if one is positive and the other is negative
+# Zero is neither positive nor negative, so it breaks alternation
+opposite_signs:/bol a num, b num {
+    # Zero breaks the alternating sequence
+    if a == 0 || b == 0 {
+        ret false
+    }
+    
+    # Check if signs are different: one positive, one negative
+    ret (a > 0 && b < 0) || (a < 0 && b > 0)
+}
+
+# Function to find the length of longest alternating subarray
+find_longest_alternating:/num arr num[], size num {
+    if size <= 1 {
+        ret 0
+    }
+    
+    :max_length/num = 0
+    :current_length/num = 1
+    
+    for :i/num = 1, i < size, i++ {
+        if @opposite_signs arr[i-1], arr[i] {
+            current_length++
+        } else {
+            # Update max_length if current is longer
+            if current_length > max_length {
+                max_length = current_length
+            }
+            current_length = 1  # Reset to 1 (current element)
+        }
+    }
+    
+    # Check one final time after loop ends
+    if current_length > max_length {
+        max_length = current_length
+    }
+    
+    # If no alternating pair was found, return 0
+    if max_length < 2 {
+        ret 0
+    }
+    
+    ret max_length
+}
+
+# Test function for a single test case
+test_case:/bol test_name str, arr num[], size num, expected num {
+    @out "Test: "
+    @outln test_name
+    @out "Input: ["
+    for :i/num = 0, i < size, i++ {
+        @out @num2str arr[i]
+        if i < size - 1 {
+            @out ", "
+        }
+    }
+    @outln "]"
+    
+    :result/num = @find_longest_alternating arr, size
+    @out "Output: "
+    @outln @num2str result
+    @out "Expected: "
+    @outln @num2str expected
+    
+    if result == expected {
+        @outln "✓ PASS"
+    } else {
+        @outln "✗ FAIL"
+    }
+    @outln ""
+}
+
+# Main program with test cases
+@outln "=== Longest Alternating Subarray Problem ==="
+@outln ""
+
+# Test Case 1: [1, -2, 6, -5, 4, -3, 2, -1] -> Expected: 8
+:test1/num[] = !num[] @mmap (8 * $num)
+test1[0] = 1
+test1[1] = 0 - 2
+test1[2] = 6
+test1[3] = 0 - 5
+test1[4] = 4
+test1[5] = 0 - 3
+test1[6] = 2
+test1[7] = 0 - 1
+@test_case "Example 1", test1, 8, 8
+
+# Test Case 2: [1, 2, -3, -4, 5, -6] -> Expected: 3  
+:test2/num[] = !num[] @mmap (6 * $num)
+test2[0] = 1
+test2[1] = 2
+test2[2] = 0 - 3
+test2[3] = 0 - 4
+test2[4] = 5
+test2[5] = 0 - 6
+@test_case "Example 2", test2, 6, 3
+
+# Test Case 3: [1, 2, 3, 4, 5] -> Expected: 0
+:test3/num[] = [1, 2, 3, 4, 5] 
+@test_case "Example 3", test3, 5, 0
+
+# Additional test cases
+@outln "=== Additional Test Cases ==="
+@outln ""
+
+# Test Case 4: Single element -> Expected: 0
+:test4/num[] = [5]
+@test_case "Single element", test4, 1, 0
+
+# Test Case 5: Two elements with opposite signs -> Expected: 2
+:test5/num[] = !num[] @mmap (2 * $num)
+test5[0] = 1
+test5[1] = 0 - 2
+@test_case "Two opposite signs", test5, 2, 2
+
+# Test Case 6: Contains zero -> Expected: 2 (only the first pair)
+:test6/num[] = !num[] @mmap (5 * $num)
+test6[0] = 1
+test6[1] = 0 - 2
+test6[2] = 0
+test6[3] = 3
+test6[4] = 0 - 4
+@test_case "Contains zero", test6, 5, 2
+
+# Test Case 7: All negative -> Expected: 0
+:test7/num[] = !num[] @mmap (4 * $num)
+test7[0] = 0 - 1
+test7[1] = 0 - 2
+test7[2] = 0 - 3
+test7[3] = 0 - 4
+@test_case "All negative", test7, 4, 0
+
+# Clean up memory
+@munmap ?num &test1, (8 * $num)
+@munmap ?num &test2, (6 * $num)
+@munmap ?num &test3, (5 * $num)
+@munmap ?num &test4, (1 * $num)
+@munmap ?num &test5, (2 * $num)
+@munmap ?num &test6, (5 * $num)
+@munmap ?num &test7, (4 * $num)
+
+@outln "=== Program Complete ==="
