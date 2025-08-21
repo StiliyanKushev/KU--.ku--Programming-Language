@@ -111,13 +111,40 @@ snake_eat_food:/bol {
     }
 
     # increase the body size
-    # and then remap memory of the body
-    SNAKE_BODY_ARR = @mremap
+    # and then remap memory of the body (with fallback for Docker/macOS)
+    :new_addr/num = @mremap
         # old_addr # SNAKE_BODY_ARR,
         # old_size # SNAKE_BODY_SIZE, 
         # new_size # SNAKE_BODY_SIZE + 8, 
         # flags    # 0,
         # new_addr # 0
+    
+    # Check if mremap failed (any negative value indicates failure)
+    if new_addr < 0 {
+        # mremap failed (likely in Docker environment)
+        # Use mmap/munmap fallback
+        :old_addr/num = SNAKE_BODY_ARR
+        :old_size/num = SNAKE_BODY_SIZE
+        :new_size/num = SNAKE_BODY_SIZE + 8
+        
+        # Allocate new memory
+        new_addr = @mmap new_size
+        if new_addr < 0 {
+            @outln "ERROR: mmap failed!"
+            @exit 1
+        }
+        
+        # Copy old data to new location
+        for :i/num = 0, i < old_size, i = i + 4 {
+            :value/num = ?num old_addr + i
+            ::new_addr + i/num = value
+        }
+        
+        # Free old memory
+        @munmap old_addr, old_size
+    }
+    
+    SNAKE_BODY_ARR = new_addr
     SNAKE_BODY_SIZE = SNAKE_BODY_SIZE + 8
 
     # append new body part to body
