@@ -42,30 +42,29 @@ A compiled programming language made from scratch using solely Node.JS.
    cd KU--.ku--Programming-Language
    ```
 
-3. **Easy way - Use the macOS runner script:**
+3. **Use the wrapper scripts (works exactly like Linux):**
    ```bash
-   # Run hello world
-   ./run-macos.sh examples/helloworld.ku
+   # Compile and run hello world (automatically runs after compilation)
+   ./kulang-macos.sh examples/helloworld.ku -c -o hello
    
-   # Run any KU program
-   ./run-macos.sh path/to/your/program.ku
+   # View AST or assembly
+   ./kulang-macos.sh examples/helloworld.ku -a
+   ./kulang-macos.sh examples/helloworld.ku -c -o hello -m
    
-   # Run all tests
-   ./run-macos.sh --test
+   # Run games (automatically compiles and runs with interactive terminal)
+   ./kulang-macos.sh examples/snake.ku -c -o snake
+   ./kulang-macos.sh examples/tetris.ku -c -o tetris
    
-   # Check requirements
-   ./run-macos.sh --setup
+   # Run tests
+   ./test-macos.sh -c
    ```
 
-4. **Manual way - Direct Docker commands:**
-   ```bash
-   # Run hello world
-   docker run --platform linux/amd64 --rm -v "$(pwd)":/workspace node:16-alpine sh -c "
-     apk add --no-cache nasm build-base > /dev/null
-     cd /workspace
-     ./kulang.sh examples/helloworld.ku -c -o hello && ./hello
-   "
-   ```
+   **That's it!** The wrapper scripts automatically:
+   - Set up Docker with Rosetta 2 emulation
+   - Install build tools (NASM, GCC) 
+   - Compile your KU program
+   - Run the program immediately (if compiled)
+   - Handle interactive terminal for games
 
 ### Command Line Options
 

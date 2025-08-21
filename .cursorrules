@@ -123,26 +123,17 @@ Since KU targets Linux x86 32-bit, it cannot run natively on macOS. However, **f
 
 **Running KU on macOS:**
 
-**Option 1: Use the provided runner script (Recommended)**
+**Use the simple wrapper scripts (works exactly like Linux):**
 ```bash
-# Run any KU program
-./run-macos.sh examples/helloworld.ku
+# Use kulang-macos.sh instead of kulang.sh
+./kulang-macos.sh examples/helloworld.ku -c -o hello
 
-# Run tests
-./run-macos.sh --test
+# Use test-macos.sh instead of test.sh  
+./test-macos.sh -c
 
-# Check setup
-./run-macos.sh --setup
-```
-
-**Option 2: Direct Docker commands**
-```bash
-# Run hello world
-docker run --platform linux/amd64 --rm -v "$(pwd)":/workspace node:16-alpine sh -c "
-  apk add --no-cache nasm build-base > /dev/null
-  cd /workspace
-  ./kulang.sh examples/helloworld.ku -c -o hello && ./hello
-"
+# Games work automatically with interactive terminal
+./kulang-macos.sh examples/snake.ku -c -o snake
+./kulang-macos.sh examples/tetris.ku -c -o tetris
 ```
 
 **Why This Works:**
@@ -230,7 +221,7 @@ When working with KU code:
 5. Follow the established syntax patterns from examples
 6. Consider Linux syscall limitations when suggesting system operations
 7. Be aware this is primarily an educational/experimental language
-8. For macOS users, recommend using `./run-macos.sh` script for easy execution
+8. For macOS users, use `./kulang-macos.sh` and `./test-macos.sh` (transparent Docker wrappers)
 9. Rosetta 2 + Docker provides full KU language support on Apple Silicon Macs
 
 ## Compiler Architecture Details
