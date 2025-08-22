@@ -1,0 +1,129 @@
+# KU Programming Language - Testing Context Rules
+
+## Project Overview
+You are working with the KU programming language - a compiled systems programming language that targets Linux x86 32-bit. The project includes a complete compiler toolchain built with Node.js.
+
+## Testing Environment Setup
+
+### Target Platform
+- **Primary**: Linux x86 32-bit (ELF format)
+- **macOS Support**: Via Docker + Rosetta 2 emulation
+- **Required Tools**: Node.js, NASM, GNU ld
+
+### Test Structure
+- **Location**: `testing/tests/` directory
+- **Format**: Each test has subdirectory with `source.ku` and `expect.log`
+- **Runner**: `testing/tests/index.js`
+- **Categories**: assign, call, conditions, define, function, loop, prefix_postfix, arrays, etc.
+
+## Testing Commands
+
+### Compiler Testing (Primary)
+```bash
+# Run all compiler tests
+./test.sh -c
+
+# Run on macOS (via Docker)
+./test-macos.sh -c
+```
+
+### Individual Program Testing
+```bash
+# Compile and test a single program
+./kulang.sh path/to/file.ku -c -o output_program
+./output_program
+
+# macOS version
+./kulang-macos.sh path/to/file.ku -c -o output_program
+```
+
+## CRITICAL: Simulator is DEPRECATED
+- **NEVER use**: `./test.sh -s` or simulator mode
+- **Only use**: Compiler mode (`-c`) for testing
+- The interpreter/simulator is broken and non-functional
+
+## Test Development Guidelines
+
+### Creating New Tests
+1. Create directory in `testing/tests/category_name/`
+2. Add `source.ku` with test program
+3. Add `expect.log` with expected output
+4. Use standard library: `include "libstd/std.ku"`
+
+### Test Code Standards
+```ku
+# Always include standard library
+include "libstd/std.ku"
+
+# Use proper type annotations
+:variable/type = value
+
+# Test specific language features
+function test_feature:/num {
+    # test implementation
+    ret 0
+}
+
+# Use standard I/O functions
+@outln "Test result: " + result
+```
+
+### Common Test Patterns
+- **Variable assignment**: Testing scoping and type system
+- **Function calls**: Parameter passing and return values
+- **Control flow**: if/else, loops, break/continue
+- **Arrays**: Multi-dimensional array manipulation
+- **Memory**: mmap/munmap operations
+- **System calls**: @syscall functionality
+
+### Debug Information
+```bash
+# View AST for debugging
+./kulang.sh source.ku -a
+
+# View generated assembly
+./kulang.sh source.ku -c -o program -m
+
+# Check compilation without execution
+./kulang.sh source.ku -c -o program
+```
+
+## Memory Management Testing
+- Test manual memory allocation/deallocation
+- Verify string concatenation creates new allocations
+- Check pointer arithmetic and dereferencing
+- Test mmap/munmap syscall usage
+
+## Error Handling
+- KU has limited error handling capabilities
+- Test boundary conditions carefully
+- Verify syscall return values
+- Check array bounds (no automatic bounds checking)
+
+## Performance Considerations
+- Tests should complete quickly (< 1 second each)
+- Avoid infinite loops in test code
+- Memory leaks are possible - test cleanup
+- Consider 32-bit integer limits in calculations
+
+## Platform-Specific Notes
+- **Linux**: Direct execution of compiled binaries
+- **macOS**: All execution happens inside Docker container
+- **Docker overhead**: Slight performance impact on macOS
+- **File paths**: Use relative paths in test programs
+
+## AI Assistant Testing Guidelines
+1. Always verify compilation with `-c` flag before considering test complete
+2. Check expected output matches actual output exactly
+3. Test both successful cases and edge cases
+4. Remember manual memory management requirements
+5. Use descriptive test names that indicate what's being tested
+6. Include comments in test source explaining the test purpose
+7. Verify tests work on both Linux and macOS (via Docker)
+
+## Debugging Failed Tests
+1. Compile with `-m` to see generated assembly
+2. Check AST with `-a` to verify parsing
+3. Review tokenization if syntax errors occur
+4. Compare expected vs actual output character by character
+5. Check for platform-specific differences (line endings, etc.)

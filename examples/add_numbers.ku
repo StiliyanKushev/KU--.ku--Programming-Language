@@ -1,0 +1,16 @@
+include "../libstd/std.ku"
+
+# Simple program to add two numbers from stdin
+@out "Enter first number: "
+:first_input/str = @rline
+:first_number/num = @str2num first_input
+
+@out "Enter second number: "
+:second_input/str = @rline  
+:second_number/num = @str2num second_input
+
+:sum/num = first_number + second_number
+:result/str = @num2str sum
+
+@out "The sum is: "
+@outln result
