@@ -1,0 +1,550 @@
+include "../libstd/std.ku"
+
+# Game constants
+:BOARD_SIZE/num = 9
+:TOTAL_CELLS/num = 81
+
+# Cell states
+:CELL_EMPTY/num = 0
+:CELL_GIVEN/num = 1  # Original puzzle numbers
+:CELL_PLAYER/num = 2 # Player-entered numbers
+
+# Game state (initialized in main function)
+
+# Convert 2D coordinates to 1D index
+get_index:/num row num, col num {
+    ret row * 9 + col
+}
+
+# Check if placing a number is valid
+is_move_valid:/bol board num[], row num, col num, number num {
+    if number < 1 || number > 9 {
+        ret false
+    }
+    
+    # Check row
+    for :i/num = 0, i < 9, i++ {
+        if i != col {
+            :idx/num = @get_index row, i
+            if board[idx] == number {
+                ret false
+            }
+        }
+    }
+    
+    # Check column
+    for :j/num = 0, j < 9, j++ {
+        if j != row {
+            :idx/num = @get_index j, col
+            if board[idx] == number {
+                ret false
+            }
+        }
+    }
+    
+    # Check 3x3 subbox
+    :start_row/num = (row / 3) * 3
+    :start_col/num = (col / 3) * 3
+    
+    for :i/num = start_row, i < start_row + 3, i++ {
+        for :j/num = start_col, j < start_col + 3, j++ {
+            if (i != row || j != col) {
+                :idx/num = @get_index i, j
+                if board[idx] == number {
+                    ret false
+                }
+            }
+        }
+    }
+    
+    ret true
+}
+
+# Generate a complete valid Sudoku board (using predefined solution for now)
+generate_complete_board:/bol board num[] {
+    # Manually set the solution values to avoid array literal issues
+    board[0] = 5
+    board[1] = 3
+    board[2] = 4
+    board[3] = 6
+    board[4] = 7
+    board[5] = 8
+    board[6] = 9
+    board[7] = 1
+    board[8] = 2
+    board[9] = 6
+    board[10] = 7
+    board[11] = 2
+    board[12] = 1
+    board[13] = 9
+    board[14] = 5
+    board[15] = 3
+    board[16] = 4
+    board[17] = 8
+    board[18] = 1
+    board[19] = 9
+    board[20] = 8
+    board[21] = 3
+    board[22] = 4
+    board[23] = 2
+    board[24] = 5
+    board[25] = 6
+    board[26] = 7
+    board[27] = 8
+    board[28] = 5
+    board[29] = 9
+    board[30] = 7
+    board[31] = 6
+    board[32] = 1
+    board[33] = 4
+    board[34] = 2
+    board[35] = 3
+    board[36] = 4
+    board[37] = 2
+    board[38] = 6
+    board[39] = 8
+    board[40] = 5
+    board[41] = 3
+    board[42] = 7
+    board[43] = 9
+    board[44] = 1
+    board[45] = 7
+    board[46] = 1
+    board[47] = 3
+    board[48] = 9
+    board[49] = 2
+    board[50] = 4
+    board[51] = 8
+    board[52] = 5
+    board[53] = 6
+    board[54] = 9
+    board[55] = 6
+    board[56] = 1
+    board[57] = 5
+    board[58] = 3
+    board[59] = 7
+    board[60] = 2
+    board[61] = 8
+    board[62] = 4
+    board[63] = 2
+    board[64] = 8
+    board[65] = 7
+    board[66] = 4
+    board[67] = 1
+    board[68] = 9
+    board[69] = 6
+    board[70] = 3
+    board[71] = 5
+    board[72] = 3
+    board[73] = 4
+    board[74] = 5
+    board[75] = 2
+    board[76] = 8
+    board[77] = 6
+    board[78] = 1
+    board[79] = 7
+    board[80] = 9
+    
+    ret true
+}
+
+# Create puzzle by removing numbers from complete board
+create_puzzle:/bol board num[], cell_types num[] {
+    # First generate complete board
+    if (@generate_complete_board board) == false {
+        ret false
+    }
+    
+    # Initialize all as given numbers
+    for :i/num = 0, i < 81, i++ {
+        cell_types[i] = CELL_GIVEN
+    }
+    
+    # Remove numbers to create puzzle (manually set positions to avoid array literal issues)
+    # Clear specific positions to create a good puzzle
+    board[2] = 0
+    cell_types[2] = CELL_EMPTY
+    board[3] = 0
+    cell_types[3] = CELL_EMPTY
+    board[5] = 0
+    cell_types[5] = CELL_EMPTY
+    board[6] = 0
+    cell_types[6] = CELL_EMPTY
+    board[7] = 0
+    cell_types[7] = CELL_EMPTY
+    board[8] = 0
+    cell_types[8] = CELL_EMPTY
+    board[10] = 0
+    cell_types[10] = CELL_EMPTY
+    board[11] = 0
+    cell_types[11] = CELL_EMPTY
+    board[14] = 0
+    cell_types[14] = CELL_EMPTY
+    board[15] = 0
+    cell_types[15] = CELL_EMPTY
+    board[17] = 0
+    cell_types[17] = CELL_EMPTY
+    board[19] = 0
+    cell_types[19] = CELL_EMPTY
+    board[20] = 0
+    cell_types[20] = CELL_EMPTY
+    board[23] = 0
+    cell_types[23] = CELL_EMPTY
+    board[25] = 0
+    cell_types[25] = CELL_EMPTY
+    board[26] = 0
+    cell_types[26] = CELL_EMPTY
+    board[29] = 0
+    cell_types[29] = CELL_EMPTY
+    board[30] = 0
+    cell_types[30] = CELL_EMPTY
+    board[32] = 0
+    cell_types[32] = CELL_EMPTY
+    board[33] = 0
+    cell_types[33] = CELL_EMPTY
+    board[35] = 0
+    cell_types[35] = CELL_EMPTY
+    board[37] = 0
+    cell_types[37] = CELL_EMPTY
+    board[38] = 0
+    cell_types[38] = CELL_EMPTY
+    board[41] = 0
+    cell_types[41] = CELL_EMPTY
+    board[42] = 0
+    cell_types[42] = CELL_EMPTY
+    board[45] = 0
+    cell_types[45] = CELL_EMPTY
+    board[47] = 0
+    cell_types[47] = CELL_EMPTY
+    board[48] = 0
+    cell_types[48] = CELL_EMPTY
+    board[50] = 0
+    cell_types[50] = CELL_EMPTY
+    board[51] = 0
+    cell_types[51] = CELL_EMPTY
+    board[54] = 0
+    cell_types[54] = CELL_EMPTY
+    board[55] = 0
+    cell_types[55] = CELL_EMPTY
+    board[57] = 0
+    cell_types[57] = CELL_EMPTY
+    board[60] = 0
+    cell_types[60] = CELL_EMPTY
+    board[61] = 0
+    cell_types[61] = CELL_EMPTY
+    board[63] = 0
+    cell_types[63] = CELL_EMPTY
+    board[64] = 0
+    cell_types[64] = CELL_EMPTY
+    board[66] = 0
+    cell_types[66] = CELL_EMPTY
+    board[69] = 0
+    cell_types[69] = CELL_EMPTY
+    board[70] = 0
+    cell_types[70] = CELL_EMPTY
+    board[72] = 0
+    cell_types[72] = CELL_EMPTY
+    board[73] = 0
+    cell_types[73] = CELL_EMPTY
+    board[74] = 0
+    cell_types[74] = CELL_EMPTY
+    board[75] = 0
+    cell_types[75] = CELL_EMPTY
+    board[78] = 0
+    cell_types[78] = CELL_EMPTY
+    
+    ret true
+}
+
+# Clear screen and position cursor at top
+clear_screen:/bol {
+    @clear
+    @out "\x1b[H"  # Move cursor to home
+}
+
+# Move cursor to specific position (1-based)
+move_cursor:/bol row num, col num {
+    :row_str/str = @num2str row
+    :col_str/str = @num2str col
+    :escape_seq/str = "\x1b[" + row_str + ";" + col_str + "H"
+    @out escape_seq
+}
+
+# Display the game board
+display_board:/bol board num[], cell_types num[], highlight_row num, highlight_col num {
+    @clear_screen
+    
+    @outln "🎯 Interactive Sudoku Game"
+    @outln "========================="
+    @outln "Use arrow keys to move, 1-9 to place numbers, 0/Del to clear"
+    @outln "ESC to quit"
+    @outln ""
+    
+    # Column headers
+    @out "    "
+    for :j/num = 0, j < 9, j++ {
+        if j % 3 == 0 && j != 0 {
+            @out "  "
+        }
+        @out @num2str (j + 1)
+        @out " "
+    }
+    @outln ""
+    
+    # Top border
+    @out "  ┌─"
+    for :j/num = 0, j < 9, j++ {
+        @out "──"
+        if j == 2 || j == 5 {
+            @out "┬─"
+        } else if j == 8 {
+            @out "┐"
+        } else {
+            @out "─"
+        }
+    }
+    @outln ""
+    
+    # Board rows
+    for :i/num = 0, i < 9, i++ {
+        # Row separator
+        if i == 3 || i == 6 {
+            @out "  ├─"
+            for :j/num = 0, j < 9, j++ {
+                @out "──"
+                if j == 2 || j == 5 {
+                    @out "┼─"
+                } else if j == 8 {
+                    @out "┤"
+                } else {
+                    @out "─"
+                }
+            }
+            @outln ""
+        }
+        
+        # Row number and data
+        @out @num2str (i + 1)
+        @out " │ "
+        
+        for :j/num = 0, j < 9, j++ {
+            # Highlight current cursor position
+            if i == highlight_row && j == highlight_col {
+                @out "\x1b[7m"  # Reverse video
+            }
+            
+            :idx/num = @get_index i, j
+            :val/num = board[idx]
+            :cell_type/num = cell_types[idx]
+            
+            if val == 0 {
+                @out ". "
+            } else {
+                # Color code: given numbers vs player numbers
+                if cell_type == CELL_GIVEN {
+                    @out "\x1b[1m"    # Bold for given numbers
+                    @out @num2str val
+                    @out "\x1b[0m"    # Reset
+                } else {
+                    @out "\x1b[34m"   # Blue for player numbers
+                    @out @num2str val
+                    @out "\x1b[0m"    # Reset
+                }
+                @out " "
+            }
+            
+            if i == highlight_row && j == highlight_col {
+                @out "\x1b[0m"  # Reset reverse video
+            }
+            
+            if j == 2 || j == 5 {
+                @out "│ "
+            }
+        }
+        @out "│"
+        @outln ""
+    }
+    
+    # Bottom border
+    @out "  └─"
+    for :j/num = 0, j < 9, j++ {
+        @out "──"
+        if j == 2 || j == 5 {
+            @out "┴─"
+        } else if j == 8 {
+            @out "┘"
+        } else {
+            @out "─"
+        }
+    }
+    @outln ""
+    @outln ""
+}
+
+# Check if puzzle is complete and valid
+is_puzzle_complete:/bol board num[] {
+    # Check if all cells are filled
+    for :i/num = 0, i < 81, i++ {
+        if board[i] == 0 {
+            ret false
+        }
+    }
+    
+    # Check if all constraints are satisfied
+    for :i/num = 0, i < 9, i++ {
+        for :j/num = 0, j < 9, j++ {
+            :idx/num = @get_index i, j
+            :val/num = board[idx]
+            if (@is_move_valid board, i, j, val) == false {
+                ret false
+            }
+        }
+    }
+    
+    ret true
+}
+
+# Show error message temporarily
+show_error:/bol message str {
+    @out "\x1b[31m"  # Red color
+    @outln message
+    @out "\x1b[0m"   # Reset color
+    @sleep 1000      # Show for 1 second
+}
+
+# Main game loop
+game_loop:/bol board num[], cell_types num[] {
+    :game_running/bol = true
+    :cursor_row/num = 0
+    :cursor_col/num = 0
+    
+    while game_running == true {
+        @display_board board, cell_types, cursor_row, cursor_col
+        
+        # Check for completion
+        if @is_puzzle_complete board {
+            @outln "🎉 Congratulations! You solved the puzzle!"
+            @outln "Press any key to exit..."
+            @rkey true
+            ret true
+        }
+        
+        :row_display/str = @num2str (cursor_row + 1)
+        :col_display/str = @num2str (cursor_col + 1)
+        :position_msg/str = "Position: (" + row_display + "," + col_display + ")"
+        @outln position_msg
+        
+        :key/chr = @rkey true
+        :key_num/num = !num key
+        
+        # Handle arrow keys (ANSI escape sequences)
+        if key_num == 27 {  # ESC key
+            :next_key/chr = @rkey true
+            if (!num next_key) == 91 {  # '['
+                :arrow_key/chr = @rkey true
+                :arrow_num/num = !num arrow_key
+                
+                if arrow_num == 65 {      # Up arrow
+                    if cursor_row > 0 {
+                        cursor_row--
+                    }
+                } else if arrow_num == 66 {  # Down arrow
+                    if cursor_row < 8 {
+                        cursor_row++
+                    }
+                } else if arrow_num == 67 {  # Right arrow
+                    if cursor_col < 8 {
+                        cursor_col++
+                    }
+                } else if arrow_num == 68 {  # Left arrow
+                    if cursor_col > 0 {
+                        cursor_col--
+                    }
+                }
+            } else {
+                # ESC pressed alone - quit game
+                game_running = false
+            }
+        }
+        # Handle number keys (1-9)
+        else if key_num >= 49 && key_num <= 57 {  # '1' to '9'
+            :number/num = key_num - 48
+            :idx/num = @get_index cursor_row, cursor_col
+            
+            # Can only modify empty cells or player-entered cells
+            if cell_types[idx] != CELL_GIVEN {
+                if @is_move_valid board, cursor_row, cursor_col, number {
+                    board[idx] = number
+                    cell_types[idx] = CELL_PLAYER
+                } else {
+                    @show_error "❌ Invalid move! Number conflicts with Sudoku rules."
+                }
+            } else {
+                @show_error "❌ Cannot modify given numbers!"
+            }
+        }
+        # Handle clear (0 or Delete/Backspace)
+        else if key_num == 48 || key_num == 127 || key_num == 8 {  # '0' or DEL or BS
+            :idx/num = @get_index cursor_row, cursor_col
+            if cell_types[idx] == CELL_PLAYER {
+                board[idx] = 0
+                cell_types[idx] = CELL_EMPTY
+            } else if cell_types[idx] == CELL_GIVEN {
+                @show_error "❌ Cannot clear given numbers!"
+            }
+        }
+        # Handle WASD movement (alternative)
+        else if key == 'w' || key == 'W' {
+            if cursor_row > 0 { cursor_row-- }
+        }
+        else if key == 's' || key == 'S' {
+            if cursor_row < 8 { cursor_row++ }
+        }
+        else if key == 'a' || key == 'A' {
+            if cursor_col > 0 { cursor_col-- }
+        }
+        else if key == 'd' || key == 'D' {
+            if cursor_col < 8 { cursor_col++ }
+        }
+        else if key == 'q' || key == 'Q' {
+            game_running = false
+        }
+    }
+    
+    ret true
+}
+
+# Initialize and start the game
+main:/bol {
+    # Allocate memory for game state
+    :board/num[] = !num[] @mmap (81 * $num)
+    :cell_types/num[] = !num[] @mmap (81 * $num)
+    
+    @outln "🎯 Generating random Sudoku puzzle..."
+    @outln "Please wait..."
+    
+    if (@create_puzzle board, cell_types) == false {
+        @outln "❌ Failed to generate puzzle!"
+        ret false
+    }
+    
+    @outln "✅ Puzzle created successfully!"
+    @outln "🎮 Starting game..."
+    
+    # Hide cursor commented out for now to avoid potential issues
+    # @hide_cursor
+    @game_loop board, cell_types
+    # @show_cursor
+    
+    @clear_screen
+    @outln "Thanks for playing Sudoku! 👋"
+    
+    # Clean up memory
+    @munmap ?num &board, (81 * $num)
+    @munmap ?num &cell_types, (81 * $num)
+    
+    ret true
+}
+
+# Start the game
+@main

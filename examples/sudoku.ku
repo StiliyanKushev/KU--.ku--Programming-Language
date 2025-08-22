@@ -1,0 +1,164 @@
+include "../libstd/std.ku"
+
+# Convert 2D coordinates to 1D index for 9x9 grid
+get_index:/num row num, col num {
+    ret row * 9 + col
+}
+
+# Check if placing a number in a position is valid
+is_valid:/bol board num[], row num, col num, number num {
+    # Check row
+    for :i/num = 0, i < 9, i++ {
+        :idx/num = @get_index row, i
+        if board[idx] == number {
+            ret false
+        }
+    }
+    
+    # Check column
+    for :j/num = 0, j < 9, j++ {
+        :idx/num = @get_index j, col
+        if board[idx] == number {
+            ret false
+        }
+    }
+    
+    # Check 3x3 subbox
+    :start_row/num = (row / 3) * 3
+    :start_col/num = (col / 3) * 3
+    
+    for :i/num = start_row, i < start_row + 3, i++ {
+        for :j/num = start_col, j < start_col + 3, j++ {
+            :idx/num = @get_index i, j
+            if board[idx] == number {
+                ret false
+            }
+        }
+    }
+    
+    ret true
+}
+
+# Find next empty cell (value 0), returns true if found
+find_empty:/bol board num[], row_ptr num, col_ptr num {
+    for :i/num = 0, i < 9, i++ {
+        for :j/num = 0, j < 9, j++ {
+            :idx/num = @get_index i, j
+            if board[idx] == 0 {
+                # Store found position in provided addresses
+                ::row_ptr /num = i
+                ::col_ptr /num = j
+                ret true
+            }
+        }
+    }
+    ret false
+}
+
+# Solve sudoku using backtracking algorithm
+solve:/bol board num[] {
+    # Allocate memory for row and column pointers
+    :row_addr/num = @mmap $num
+    :col_addr/num = @mmap $num
+    
+    # Find next empty cell
+    if (@find_empty board, row_addr, col_addr) == false {
+        # Clean up memory and return true (puzzle solved)
+        @munmap row_addr, $num
+        @munmap col_addr, $num
+        ret true
+    }
+    
+    # Get row and column values
+    :row/num = ?num row_addr
+    :col/num = ?num col_addr
+    
+    # Try numbers 1-9
+    for :number/num = 1, number <= 9, number++ {
+        if @is_valid board, row, col, number {
+            # Place number
+            :idx/num = @get_index row, col
+            board[idx] = number
+            
+            # Recursively solve
+            if @solve board {
+                # Clean up memory and return true
+                @munmap row_addr, $num
+                @munmap col_addr, $num
+                ret true
+            }
+            
+            # Backtrack - remove number
+            board[idx] = 0
+        }
+    }
+    
+    # Clean up memory and return false
+    @munmap row_addr, $num
+    @munmap col_addr, $num
+    ret false
+}
+
+# Print the sudoku board
+print_board:/bol board num[] {
+    for :i/num = 0, i < 9, i++ {
+        if i % 3 == 0 && i != 0 {
+            @outln "------+-------+------"
+        }
+        for :j/num = 0, j < 9, j++ {
+            if j % 3 == 0 && j != 0 {
+                @out "| "
+            }
+            :idx/num = @get_index i, j
+            :val/num = board[idx]
+            if val == 0 {
+                @out ". "
+            } else {
+                @out @num2str val
+                @out " "
+            }
+        }
+        @outln ""
+    }
+}
+
+# Main program
+main:/bol {
+    @outln "Sudoku Solver"
+    @outln "============="
+    @outln ""
+    
+    # Initialize the board with the example puzzle
+    # 0 represents empty cells (instead of '.')
+    :board/num[] = [
+        5, 3, 0, 0, 7, 0, 0, 0, 0,
+        6, 0, 0, 1, 9, 5, 0, 0, 0,
+        0, 9, 8, 0, 0, 0, 0, 6, 0,
+        8, 0, 0, 0, 6, 0, 0, 0, 3,
+        4, 0, 0, 8, 0, 3, 0, 0, 1,
+        7, 0, 0, 0, 2, 0, 0, 0, 6,
+        0, 6, 0, 0, 0, 0, 2, 8, 0,
+        0, 0, 0, 4, 1, 9, 0, 0, 5,
+        0, 0, 0, 0, 8, 0, 0, 7, 9
+    ]
+    
+    @outln "Original puzzle:"
+    @print_board board
+    @outln ""
+    
+    @outln "Solving..."
+    
+    if @solve board {
+        @outln "Solved puzzle:"
+        @print_board board
+        @outln ""
+        @outln "Solution found!"
+    } else {
+        @outln "No solution exists for this puzzle."
+    }
+    
+    ret true
+}
+
+# Call the main function
+@main
