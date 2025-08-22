@@ -1,0 +1,217 @@
+# KU Programming Language - Running Context Rules
+
+## Project Overview
+You are working with the KU programming language - a compiled systems programming language that targets Linux x86 32-bit. Focus on execution, compilation, and runtime behavior.
+
+## Compilation & Execution
+
+### Standard Workflow
+```bash
+# Compile a KU program
+./kulang.sh path/to/program.ku -c -o output_name
+
+# Run the compiled program
+./output_name
+
+# macOS users (via Docker + Rosetta 2)
+./kulang-macos.sh path/to/program.ku -c -o output_name
+```
+
+### Compilation Flags
+- **`-c`**: Compile mode (REQUIRED - simulator is deprecated)
+- **`-o name`**: Output executable name
+- **`-a`**: Show Abstract Syntax Tree (debug)
+- **`-m`**: Show generated assembly code (debug)
+
+## Runtime Environment
+
+### Target Platform
+- **Architecture**: x86 32-bit
+- **Format**: ELF (Executable and Linkable Format)
+- **OS**: Linux syscall interface
+- **Memory Model**: Manual management via mmap/munmap
+
+### System Dependencies
+- **NASM**: Netwide Assembler for assembly compilation
+- **GNU ld**: Linker for creating executables
+- **Linux syscalls**: Direct system interface via `int 0x80`
+
+## Memory Management
+
+### Manual Allocation
+```ku
+# Allocate memory
+:ptr/num = @mmap 0, size, 3, 34, -1, 0
+
+# Free memory
+@munmap ptr, size
+```
+
+### String Handling
+- Strings are heap-allocated and require manual management
+- String concatenation creates new allocations
+- Always free concatenated strings when done
+
+### Common Memory Patterns
+```ku
+# Safe string concatenation pattern
+:result/str = str1 + str2
+# ... use result ...
+@munmap result, @strlen result
+```
+
+## Standard Library Usage
+
+### Essential Functions (`libstd/std.ku`)
+```ku
+include "libstd/std.ku"
+
+# I/O Operations
+@out "Hello"           # Print without newline
+@outln "Hello World"   # Print with newline
+:input/str = @rline    # Read line from user
+:key/chr = @rkey       # Read single key
+
+# String Operations
+:len/num = @strlen str
+:cmp/num = @strcmp str1, str2
+:substr/str = @strcut str, start, length
+
+# Type Conversions
+:num_val/num = @str2num str_input
+:str_val/str = @num2str number
+```
+
+## Interactive Applications
+
+### Terminal Control
+```ku
+@clear              # Clear screen
+@hide_cursor        # Hide cursor for games
+@show_cursor        # Show cursor
+@sleep milliseconds # Pause execution
+```
+
+### Game Development Patterns
+```ku
+# Game loop structure
+while game_running {
+    @clear
+    @render_game_state
+    :input/chr = @rkey
+    @process_input input
+    @update_game_state
+    @sleep 16  # ~60 FPS
+}
+```
+
+## Error Handling & Debugging
+
+### Runtime Errors
+- Segmentation faults indicate memory access issues
+- Invalid syscall parameters cause program termination
+- Check array bounds manually (no automatic checking)
+
+### Debugging Techniques
+```bash
+# View generated assembly for debugging
+./kulang.sh program.ku -c -o debug -m
+
+# Check AST structure
+./kulang.sh program.ku -a
+
+# Use strace for syscall debugging (Linux)
+strace ./program
+```
+
+### Common Runtime Issues
+1. **Stack overflow**: Deep recursion or large local variables
+2. **Memory leaks**: Forgetting to munmap allocated memory
+3. **Invalid pointers**: Accessing freed or uninitialized memory
+4. **Syscall errors**: Wrong parameters to system calls
+
+## Performance Considerations
+
+### Optimization Tips
+- Minimize string concatenations (expensive)
+- Reuse allocated memory when possible
+- Use efficient algorithms for array operations
+- Avoid unnecessary syscalls in loops
+
+### Memory Efficiency
+- 32-bit integers only (no 64-bit support)
+- Manual stack management for function calls
+- Direct memory addressing for performance
+
+## Platform-Specific Execution
+
+### Linux (Native)
+- Direct syscall execution
+- Full performance
+- Complete KU feature support
+
+### macOS (Docker + Rosetta 2)
+- Transparent Docker wrapper via `kulang-macos.sh`
+- Near-native performance through Rosetta 2 emulation
+- Full KU language compatibility
+- Automatic container cleanup
+
+### Execution Environment
+- **Working Directory**: Preserved inside container (macOS)
+- **File Access**: Current directory mounted automatically
+- **Interactive Input**: Full terminal passthrough
+- **Signal Handling**: Ctrl+C and other signals work correctly
+
+## AI Assistant Running Guidelines
+
+1. **Always use compiler mode** (`-c`) - simulator is broken
+2. **Prefer kulang-macos.sh on macOS** for seamless experience
+3. **Include libstd/std.ku** for standard functionality
+4. **Test interactive programs** to ensure proper I/O handling
+5. **Verify memory cleanup** in long-running programs
+6. **Check syscall return values** for error handling
+7. **Use appropriate data types** (32-bit limitations)
+8. **Test both simple and complex programs** to verify functionality
+
+## Common Execution Patterns
+
+### Simple Programs
+```bash
+./kulang.sh examples/helloworld.ku -c -o hello
+./hello
+```
+
+### Interactive Programs
+```bash
+./kulang.sh examples/snake.ku -c -o snake
+./snake  # Full terminal interaction works
+```
+
+### Batch Processing
+```bash
+# Compile multiple programs
+for file in examples/*.ku; do
+    name=$(basename "$file" .ku)
+    ./kulang.sh "$file" -c -o "$name"
+done
+```
+
+## Troubleshooting Runtime Issues
+
+### Compilation Fails
+1. Check syntax against KU language rules
+2. Verify all included files exist
+3. Check function signatures and type annotations
+4. Review variable declarations and scoping
+
+### Runtime Crashes
+1. Check memory allocation/deallocation balance
+2. Verify array bounds access
+3. Check pointer arithmetic
+4. Review syscall parameters
+
+### Performance Issues
+1. Profile memory usage patterns
+2. Check for unnecessary string operations
+3. Review algorithm complexity
+4. Monitor syscall frequency in loops

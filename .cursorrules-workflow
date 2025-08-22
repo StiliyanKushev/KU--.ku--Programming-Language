@@ -1,0 +1,235 @@
+# KU Programming Language - Repository Workflow Rules
+
+## Project Overview
+You are working with the KU programming language repository - a complete systems programming language implementation. Follow these workflow guidelines for effective development and contribution.
+
+## Repository Structure & File Management
+
+### Core Directories
+- **`bootstrap/`**: Core compiler implementation (Node.js)
+  - `index.js`: Main entry point
+  - `parser.js`: AST generation (727 lines)
+  - `compile.js`: Assembly generation (2483 lines)
+  - Other core modules: reader, tokenizer, simulator (deprecated)
+- **`libstd/`**: Standard library (`std.ku`)
+- **`examples/`**: Sample programs and tutorials
+- **`testing/`**: Test suite and runner
+- **`kulang-vscode-extension/`**: VS Code language support
+
+### File Types & Handling
+- **`.ku` files**: KU source code (track in git)
+- **Compiled binaries**: Add to `.gitignore`, never commit
+- **Test outputs**: Temporary, don't track
+- **Documentation**: Markdown files for project docs
+
+## Development Workflow
+
+### Branch Strategy
+```bash
+# Feature development
+git checkout -b feature/description
+# Work on changes
+git add relevant-files.ku
+git commit -m "Descriptive commit message"
+git push origin feature/description
+# Create PR via GitHub
+```
+
+### Commit Guidelines
+- **Include**: Source `.ku` files, documentation, tests
+- **Exclude**: Compiled binaries, temporary files, IDE configs
+- **Message format**: Clear description of changes and impact
+- **Scope**: Related changes together, atomic commits
+
+### Pull Request Process
+1. Create feature branch
+2. Implement changes with tests
+3. Verify compilation on target platform
+4. Write descriptive PR description
+5. Include examples of new functionality
+
+## Code Quality Standards
+
+### KU Code Standards
+```ku
+# Include standard library
+include "libstd/std.ku"
+
+# Proper type annotations
+:variable_name/type = value
+
+# Function documentation
+# Purpose: Calculate factorial of n
+factorial:/num n num {
+    if n <= 1 {
+        ret 1
+    }
+    ret n * @factorial n - 1
+}
+
+# Clear variable naming
+:user_input/str = @rline
+:parsed_number/num = @str2num user_input
+```
+
+### Testing Requirements
+- Every new feature needs corresponding tests
+- Tests must pass on both Linux and macOS (Docker)
+- Include edge cases and error conditions
+- Use descriptive test names and documentation
+
+### Documentation Standards
+- Update README for significant changes
+- Comment complex algorithms in examples
+- Include usage examples for new features
+- Document any platform-specific behavior
+
+## File Organization Guidelines
+
+### Examples Directory
+- **Simple examples**: Basic language feature demonstrations
+- **Complex examples**: Games, algorithms, real applications
+- **Educational progression**: Start simple, build complexity
+- **Naming convention**: Descriptive, lowercase with underscores
+
+### Testing Organization
+```
+testing/tests/
+├── feature_name/
+│   ├── source.ku      # Test program
+│   └── expect.log     # Expected output
+└── index.js           # Test runner
+```
+
+### Code Organization Within Files
+- Standard library inclusion first
+- Type definitions and constants
+- Helper functions before main logic
+- Main program flow at bottom
+- Clear separation of concerns
+
+## Platform Compatibility
+
+### Linux (Primary Target)
+- Native compilation and execution
+- Full syscall support
+- Direct binary execution
+- Complete feature set
+
+### macOS Support (Docker)
+- Use `kulang-macos.sh` and `test-macos.sh`
+- Transparent Docker integration
+- Rosetta 2 emulation required
+- Full compatibility maintained
+
+### Development Environment
+```bash
+# Check platform and setup
+uname -a  # Verify platform
+./install.sh  # Install dependencies
+
+# Platform-specific testing
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    ./test-macos.sh -c
+else
+    ./test.sh -c
+fi
+```
+
+## Contribution Workflow
+
+### Before Starting
+1. Check existing issues and PRs
+2. Understand project scope and limitations
+3. Set up development environment
+4. Run existing tests to verify setup
+
+### Development Process
+1. **Plan**: Break down feature into testable components
+2. **Implement**: Write KU code following project standards
+3. **Test**: Create comprehensive test cases
+4. **Document**: Update relevant documentation
+5. **Review**: Self-review for code quality and completeness
+
+### Quality Checklist
+- [ ] Code compiles without errors
+- [ ] All tests pass (compiler mode only)
+- [ ] New features have corresponding tests
+- [ ] Documentation updated as needed
+- [ ] Examples work on both platforms
+- [ ] Memory management is correct
+- [ ] No compiled binaries committed
+
+## Issue & PR Management
+
+### Issue Creation
+- Clear problem description
+- Steps to reproduce (if bug)
+- Expected vs actual behavior
+- Platform information
+- Code examples where relevant
+
+### PR Requirements
+- Descriptive title and description
+- Link to related issues
+- Test results included
+- Breaking changes highlighted
+- Examples of new functionality
+
+### Code Review Focus
+- Correctness of KU syntax and semantics
+- Memory management safety
+- Test coverage adequacy
+- Cross-platform compatibility
+- Performance implications
+
+## AI Assistant Workflow Guidelines
+
+### When Adding Features
+1. Understand existing codebase architecture
+2. Follow established patterns and conventions
+3. Create comprehensive tests first (TDD approach)
+4. Verify compilation and execution
+5. Document new functionality clearly
+
+### When Fixing Bugs
+1. Reproduce the issue first
+2. Create test case that fails
+3. Implement fix
+4. Verify test now passes
+5. Check for regression in existing tests
+
+### When Refactoring
+1. Ensure all existing tests pass first
+2. Make changes incrementally
+3. Test after each significant change
+4. Update documentation to match changes
+5. Consider performance implications
+
+## Repository Maintenance
+
+### Regular Tasks
+- Run full test suite periodically
+- Check for dependency updates (Node.js, NASM)
+- Verify examples still work
+- Update documentation for accuracy
+- Clean up temporary files and binaries
+
+### Version Management
+- Use semantic versioning for releases
+- Tag important milestones
+- Maintain changelog for significant changes
+- Consider backward compatibility impact
+
+### Community Guidelines
+- Welcome contributions from newcomers
+- Provide helpful feedback in reviews
+- Maintain project scope and focus
+- Document design decisions clearly
+
+## Security Considerations
+- KU programs run with full system access
+- Review system call usage carefully
+- Be cautious with memory operations
+- Validate user input in interactive programs
+- Consider security implications of examples
