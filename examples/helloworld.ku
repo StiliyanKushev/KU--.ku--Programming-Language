@@ -1,3 +1,136 @@
 include "../libstd/std.ku"
 
-@outln "Hello World"
+# =================================================
+# KU Programming Language - Expanded Hello World
+# =================================================
+# This example demonstrates basic output, variables,
+# data types, and standard library functions
+
+# Clear the screen for a clean start
+@clear
+
+# === BASIC OUTPUT DEMONSTRATIONS ===
+@outln "================================="
+@outln "  KU Programming Language Demo"  
+@outln "================================="
+@outln ""
+
+# Basic hello world
+@outln "Hello World!"
+@outln "Greetings from the KU programming language!"
+@outln ""
+
+# Using out() without newline
+@out "This is printed "
+@out "on the same line "
+@outln "with multiple calls!"
+@outln ""
+
+# === VARIABLE DEMONSTRATIONS ===
+@outln "--- Variable Examples ---"
+
+# String variables
+:name/str = "KU Programmer"
+:language/str = "KU"
+:version/str = "v1.0"
+
+@outln "Name: " + name
+@outln "Language: " + language  
+@outln "Version: " + version
+@outln ""
+
+# Number variables and operations
+:year/num = 2024
+:current_age/num = 25
+:future_age/num = current_age + 10
+
+@outln "Current year: " + @num2str year
+@outln "Current age: " + @num2str current_age
+@outln "Age in 10 years: " + @num2str future_age
+@outln ""
+
+# === DATA TYPE CONVERSIONS ===
+@outln "--- Data Type Examples ---"
+
+# Boolean variables
+:is_learning/bol = true
+:is_complete/bol = false
+
+@outln "Learning KU: " + @bol2str is_learning
+@outln "Project complete: " + @bol2str is_complete
+@outln ""
+
+# Decimal calculations
+:pi/dec = 3.14159
+:radius/dec = 5.0
+:area/dec = pi * (radius * radius)
+
+@outln "Pi value: " + @dec2str pi
+@outln "Radius: " + @dec2str radius  
+@outln "Circle area: " + @dec2str area
+@outln ""
+
+# === MATHEMATICAL OPERATIONS ===
+@outln "--- Math Operations ---"
+
+:num1/num = 42
+:num2/num = 8
+:sum/num = num1 + num2
+:difference/num = num1 - num2  
+:product/num = num1 * num2
+:quotient/num = num1 / num2
+
+@outln "Number 1: " + @num2str num1
+@outln "Number 2: " + @num2str num2
+@outln "Sum: " + @num2str sum
+@outln "Difference: " + @num2str difference
+@outln "Product: " + @num2str product
+@outln "Quotient: " + @num2str quotient
+@outln ""
+
+# === CHARACTER DEMONSTRATIONS ===  
+@outln "--- Character Examples ---"
+
+:first_char/chr = 'A'
+:second_char/chr = 'B'
+:space_char/chr = ' '
+
+@out "Characters: "
+@out @chr2str first_char
+@out @chr2str space_char  
+@out @chr2str second_char
+@outln ""
+@outln ""
+
+# === STRING OPERATIONS ===
+@outln "--- String Operations ---"
+
+:greeting/str = "Hello"
+:target/str = "World"
+:punctuation/str = "!"
+:full_message/str = greeting + " " + target + punctuation
+
+@outln "Greeting: " + greeting
+@outln "Target: " + target
+@outln "Full message: " + full_message
+@outln "Message length: " + @num2str @strlen full_message
+@outln ""
+
+# === FINAL MESSAGES ===
+@outln "--- Final Thoughts ---"
+@outln "This example showcased:"
+@outln "• Basic output functions (out, outln, clear)"
+@outln "• Variable declarations and types"
+@outln "• String concatenation and operations"  
+@outln "• Mathematical calculations"
+@outln "• Data type conversions"
+@outln "• Character handling"
+@outln ""
+
+@outln "Thank you for exploring KU programming language!"
+@outln "Happy coding!"
+@outln ""
+
+@outln "================================="
+@outln "     End of Hello World Demo"
+@outln "================================="
